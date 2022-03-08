@@ -1,6 +1,7 @@
 import torch
 import pandas as pd
 import numpy as np
+from conllu import parse_incr
 from transformers import AutoTokenizer, AutoModelForMaskedLM, BertForTokenClassification, BertTokenizer, BertConfig, BertModel
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SequentialSampler
@@ -8,32 +9,39 @@ from classes import CustomDataset, SentenceGetter, BERTClass
 
 #Pre Processing
 
-def parse_dataframe(df):
-    df['sentence_id'] = np.NaN
-    r = 0
-    for i, (n, _, _, _) in df.iterrows():
-        if n == 0:
-            df.iloc[i, df.columns.get_loc('sentence_id')] = f"sentence {r}"
-            r += 1
+def read_conllu(file_name):
+  f = open(f'{file_name}.conllu', 'r', encoding='utf-8') 
+  token_lists = list(parse_incr(f, fields=['id', 'word', 'tag'])) 
+  f.close()
+  words, words_tags = [], []
+  sen_idx, c = [], 0 
+  for i, tl in enumerate(token_lists): 
+      for j,_ in enumerate(tl): 
+          words.append(token_lists[i][j]['word']) 
+          words_tags.append(token_lists[i][j]['tag']) 
 
-  # pandas has a very handy "forward fill" function to fill missing values based on the last upper non-nan value
-    df = df.fillna(method='ffill')
-    return df
+          if token_lists[i][j]['id']==0:  
+              sen_idx.append(f'sentence {c}') 
+              c += 1 
+          else: sen_idx.append(np.NaN)
+
+  data = {'sentence_id':sen_idx,'word':words, 'tag':words_tags} 
+  df = pd.DataFrame(data=data)
+  df = df.fillna(method='ffill')
+  return df
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("device: ", device)
 
-df_train = pd.read_csv('data/conll/train.conllu', sep='\t', on_bad_lines='skip', engine='python')
-df_test = pd.read_csv('data/conll/test.conllu', sep='\t', on_bad_lines='skip', engine='python')
+df_train = read_conllu('train')
+df_test = read_conllu('test')
 
-labels_to_ids = {k: v for v, k in enumerate(df_train.tag.unique())}
-ids_to_labels = {v: k for v, k in enumerate(df_train.tag.unique())}
-
-train_getter = SentenceGetter(parse_dataframe(df_train))
-test_getter = SentenceGetter(parse_dataframe(df_test))
+train_getter = SentenceGetter(df_train)
+test_getter = SentenceGetter(df_test)
 
 tags_vals = list(set(df_train["tag"].values))
 tag2idx = {t: i for i, t in enumerate(tags_vals)}
+
 train_sentences = [' '.join([s[0] for s in sent]) for sent in train_getter.sentences]
 test_sentences = [' '.join([s[0] for s in sent]) for sent in test_getter.sentences]
 train_labels = [[s[1] for s in sent] for sent in train_getter.sentences]
@@ -46,20 +54,16 @@ amount_tags = len(tags_vals) #len(df_train.tag.unique())
 
 # Configuration
 
-tokenizer = AutoTokenizer.from_pretrained("dccuchile/bert-base-spanish-wwm-cased")
+tokenizer = AutoTokenizer.from_pretrained("dccuchile/bert-base-spanish-wwm-cased", num_labels=amount_tags)
 #model = AutoModelForMaskedLM.from_pretrained("dccuchile/bert-base-spanish-wwm-cased")
 
-MAX_LEN = 200
-TRAIN_BATCH_SIZE = 16 #aca tuve que bajarle un poco al batch size, sino se rompia
+MAX_LEN = 300 #el origianl estaba en 200, pero creo que el maximo que tengo es de 261
+TRAIN_BATCH_SIZE = 8 #aca tuve que bajarle un poco al batch size, sino se rompia
 VALID_BATCH_SIZE = 16
 EPOCHS = 5
 LEARNING_RATE = 2e-05
 
-train_sentences = train_sentences
-train_labels = train_labels 
-
-test_sentences = test_sentences
-test_labels = train_labels
+test_labels = train_labels #afirmo que usan las mismas labels
 
 print(f"TRAIN Dataset: {len(train_sentences)} sentences")
 print(f"TEST Dataset: {len(test_sentences)} sentences")
