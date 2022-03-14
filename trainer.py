@@ -9,6 +9,12 @@ from transformers import (
     BertForTokenClassification,
 )
 
+# TODO
+# -> Parametros para guardar el modelo final
+# -> seguir insistiendo con el padding para que se haga dinamico
+# -> probar diferentes batch sizes, tambien por parametros
+
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("device: ", device)
 
@@ -25,7 +31,6 @@ model = BertForTokenClassification.from_pretrained(
 
 from datasets import load_dataset, load_metric
 
-metric = load_metric("f1")
 raw_datasets = load_dataset("conll2002", "es")
 
 raw_datasets["train"] = raw_datasets["train"].rename_column(
@@ -57,7 +62,8 @@ def extend_labels(example):
         return example
 
 
-def compute_metrics(pred):
+def compute_metrics(eval_pred):
+    metric = load_metric("f1")
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
     return metric.compute(predictions=predictions, references=labels)
@@ -98,9 +104,12 @@ trainer = Trainer(
     optimizers=(torch.optim.AdamW(model.parameters()), None),
     data_collator=data_collator,
     tokenizer=tokenizer,
-    compute_metrics=compute_metrics,
 )
 
 trainer.train()
 
-trainer.eval()
+trainer.save_model("betoNER-finetuned-CONLL/trained_model/")
+
+metrics=trainer.evaluate()
+print(metrics)
+
