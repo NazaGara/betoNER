@@ -10,6 +10,7 @@ from transformers import (
 )
 
 # TODO
+# -> intentar overfittear para un cjto del train
 # -> Parametros para guardar el modelo final
 # -> seguir insistiendo con el padding para que se haga dinamico
 # -> probar diferentes batch sizes, tambien por parametros
@@ -20,6 +21,7 @@ print("device: ", device)
 
 MAX_LEN = 512  # el maximo de BERT
 AMOUNT_TAGS = 9
+PERC=7 #porcentaje del dataset que vamos a utilizar
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=AMOUNT_TAGS)
@@ -28,19 +30,7 @@ model = BertForTokenClassification.from_pretrained(
 )
 # model = AutoModelForMaskedLM.from_pretrained(checkpoint, num_labels=AMOUNT_TAGS)
 
-
 from datasets import load_dataset, load_metric
-
-raw_datasets = load_dataset("conll2002", "es")
-
-raw_datasets["train"] = raw_datasets["train"].rename_column(
-    "ner_tags", "labels"
-)
-raw_datasets["test"] = raw_datasets["test"].rename_column("ner_tags", "labels")
-raw_datasets["validation"] = raw_datasets["validation"].rename_column(
-    "ner_tags", "labels"
-)
-
 
 def tokenize_function(example):
     return tokenizer(
@@ -48,9 +38,7 @@ def tokenize_function(example):
         is_split_into_words=True,
         truncation=True,
         max_length=MAX_LEN,
-        padding="max_length",
-    )
-
+        padding="max_length")
 
 def extend_labels(example):
     k = len(example["labels"])
@@ -62,19 +50,32 @@ def extend_labels(example):
         return example
 
 
-def compute_metrics(eval_pred):
-    metric = load_metric("f1")
-    logits, labels = eval_pred
-    predictions = np.argmax(logits, axis=-1)
-    return metric.compute(predictions=predictions, references=labels)
+from transformers.trainer_utils import EvalPrediction
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+def compute_metrics(pred : EvalPrediction):
+    """Funcion que ejecuta el Trainer al evaluar"""
+    labels = pred.label_ids
+    preds = pred.predictions.argmax(-1)
+    precision, recall, f1, _ = precision_recall_fscore_support(labels,
+        preds,
+        average='binary')
+    acc = accuracy_score(labels, preds)
+    return {
+        'accuracy': acc,
+        'f1': f1,
+        'precision': precision,
+        'recall': recall
+    }
 
 
-encoded_datasets = raw_datasets.map(
-    tokenize_function,
-    batched=True,
-    remove_columns=["id", "tokens", "pos_tags"],
-)
-finish_datasets = encoded_datasets.map(extend_labels)
+train_ds, test_ds = load_dataset('conll2002', 'es', split=[f'train[:{PERC}%]', f'test[:{PERC}%]'])
+train_ds, test_ds = train_ds.rename_column('ner_tags', 'labels'), test_ds.rename_column('ner_tags', 'labels')
+
+train_ds = train_ds.map(tokenize_function, batched=True, remove_columns=['id', 'tokens', 'pos_tags'])
+test_ds = test_ds.map(tokenize_function, batched=True, remove_columns=['id', 'tokens', 'pos_tags'])
+
+train_ds = train_ds.map(extend_labels) #, batched=True)
+test_ds = test_ds.map(extend_labels) #, batched=True)
 
 from transformers import DataCollatorWithPadding, TrainingArguments, Trainer
 
@@ -92,6 +93,7 @@ training_args = TrainingArguments(
     per_device_eval_batch_size=8,
     num_train_epochs=3,
     learning_rate=1e-5,
+    weight_decay=0.1,
     group_by_length=True,
 )
 
@@ -99,11 +101,12 @@ training_args = TrainingArguments(
 trainer = Trainer(
     model,
     training_args,
-    train_dataset=finish_datasets["train"],
-    eval_dataset=finish_datasets["test"],
+    ttrain_dataset=train_ds,
+    eval_dataset=test_ds,
     optimizers=(torch.optim.AdamW(model.parameters()), None),
     data_collator=data_collator,
     tokenizer=tokenizer,
+    #compute_metrics=compute_metrics
 )
 
 trainer.train()
