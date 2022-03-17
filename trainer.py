@@ -78,13 +78,18 @@ model = BertForTokenClassification.from_pretrained(
 
 from datasets import load_dataset, load_metric
 
+metric = load_metric("f1")
+
+
 def tokenize_function(example):
     return tokenizer(
         example["tokens"],
         is_split_into_words=True,
         truncation=True,
         max_length=MAX_LEN,
-        padding="max_length")
+        padding="max_length",
+    )
+
 
 def extend_labels(example):
     k = len(example["labels"])
@@ -148,17 +153,17 @@ training_args = TrainingArguments(
 trainer = Trainer(
     model,
     training_args,
-    ttrain_dataset=train_ds,
+    train_dataset=train_ds,
     eval_dataset=test_ds,
     optimizers=(torch.optim.AdamW(model.parameters()), None),
     data_collator=data_collator,
     tokenizer=tokenizer,
-    #compute_metrics=compute_metrics
+    compute_metrics=compute_metrics,
 )
 
 trainer.train()
 
-trainer.save_model("betoNER-finetuned-CONLL/trained_model/")
+trainer.save_model(f"betoNER-finetuned-CONLL-{PERC}/trained_model/")
 
 #El tema de los metrics, no anda para nada, vemos por otro lado
 #metrics=trainer.evaluate()
