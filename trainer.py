@@ -77,9 +77,9 @@ TEST_BACTH_SIZE = args.test_batch_size
 
 # TODO
 # -> intentar overfittear para un cjto del train
-# -> Parametros para guardar el modelo final
 # -> seguir insistiendo con el padding para que se haga dinamico
 # -> probar diferentes batch sizes, tambien por parametros
+# -> Parametros para guardar el modelo final ✓
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -98,6 +98,11 @@ metric = load_metric("f1")
 
 
 def tokenize_function(example):
+    """
+    Funcion para tokenizar las palabras, notar que lo hace por palbra, no 
+    por sentencia. Usada junto al map de los Dataset, retorna otro Dataset, que
+    ahora contiene token_ids y attention_mask.
+    """
     return tokenizer(
         example["tokens"],
         is_split_into_words=True,
@@ -122,19 +127,32 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 
 def compute_metrics(pred: EvalPrediction):
-    """Funcion que ejecuta el Trainer al evaluar"""
+    """
+    Funcion que ejecuta el Trainer al evaluar, retorna un diccionario con la
+    precision y el f1-score. La 2da metrica es mejor cuando los datos tienen 
+    mas desiguladad en las labels.
+    """
     labels = pred.label_ids
     preds = pred.predictions.argmax(-1)
-    precision, recall, f1, _ = precision_recall_fscore_support(
-        labels, preds, average="binary"
+    unpadding_labels, unpadding_preds = [], []
+    for i, s in enumerate(ds["tokens"]):
+        k = len(s)
+        unpadding_labels.append(labels[i][:k])
+        unpadding_preds.append(preds[i][:k])
+
+    flat_preds = [
+        item for label_list in unpadding_preds for item in label_list
+    ]
+    flat_labels = [
+        item for label_list in unpadding_labels for item in label_list
+    ]
+    print(
+        f"Length predictions:{len(flat_preds)}, Length labels: {len(flat_labels)}"
     )
-    acc = accuracy_score(labels, preds)
-    return {
-        "accuracy": acc,
-        "f1": f1,
-        "precision": precision,
-        "recall": recall,
-    }
+
+    f1 = f1_score(flat_labels, flat_preds, average="micro")
+    acc = accuracy_score(flat_labels, flat_preds)
+    return {"accuracy": acc, "f1": f1}
 
 
 train_ds, test_ds = load_dataset(
@@ -200,6 +218,10 @@ from sklearn.metrics import accuracy_score, f1_score
 
 
 def evaluate(ds: Dataset):
+    """
+    Para poder evaluar en base a un Dataset con el mismo formato que fue 
+    entrenado este modelo
+    """
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
     labels = np.array(ds["labels"], dtype=object)
