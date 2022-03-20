@@ -19,39 +19,65 @@ from torch.utils.data import (
 )
 from classes import CustomDataset, SentenceGetter, BERTClass
 
-TAGS = ["O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-MISC", "I-MISC", "INWORD_TOKEN", "NO_TAG"]
+TAGS = [
+    "O",
+    "B-PER",
+    "I-PER",
+    "B-ORG",
+    "I-ORG",
+    "B-LOC",
+    "I-LOC",
+    "B-MISC",
+    "I-MISC",
+    "INWORD_TOKEN",
+    "NO_TAG",
+]
 tag2id = {t: i for i, t in enumerate(TAGS)}
 id2tag = {i: t for i, t in enumerate(TAGS)}
 
 # Pre Processing
 tokenizer = AutoTokenizer.from_pretrained(
-    "dccuchile/bert-base-spanish-wwm-cased", num_labels=len(TAGS))
+    "dccuchile/bert-base-spanish-wwm-cased", num_labels=len(TAGS)
+)
+
 
 def read_conllu(file_name: str):
-    f = open(f'{file_name}.conllu', 'r', encoding='utf-8') 
-    token_lists = list(parse_incr(f, fields=['id', 'word', 'tag'])) 
+    f = open(f"{file_name}.conllu", "r", encoding="utf-8")
+    token_lists = list(parse_incr(f, fields=["id", "word", "tag"]))
     f.close()
     words, words_tags, labels = [], [], []
-    sen_idx, c = [], 0 
-    for i, tl in enumerate(token_lists): 
-        for j,t in enumerate(tl): 
-            words.append(token_lists[i][j]['word']) 
-            words_tags.append(token_lists[i][j]['tag']) 
+    sen_idx, c = [], 0
+    for i, tl in enumerate(token_lists):
+        for j, t in enumerate(tl):
+            words.append(token_lists[i][j]["word"])
+            words_tags.append(token_lists[i][j]["tag"])
 
-            tokenized = tokenizer.tokenize(token_lists[i][j]['word'])
-            labels += [[tag2id[token_lists[i][j]['tag']]] + [tag2id['INWORD_TOKEN']] * (len(tokenized) - 1)]
+            tokenized = tokenizer.tokenize(token_lists[i][j]["word"])
+            labels += [
+                [tag2id[token_lists[i][j]["tag"]]]
+                + [tag2id["INWORD_TOKEN"]] * (len(tokenized) - 1)
+            ]
 
-            if token_lists[i][j]['id']==0:  
-                sen_idx.append(f'sentence {c}') 
-                c += 1 
-            else: sen_idx.append(np.NaN)
+            if token_lists[i][j]["id"] == 0:
+                sen_idx.append(f"sentence {c}")
+                c += 1
+            else:
+                sen_idx.append(np.NaN)
 
-    data = {'sentence_id':sen_idx,'word':words, 'tag':words_tags, 'labels': labels} 
+    data = {
+        "sentence_id": sen_idx,
+        "word": words,
+        "tag": words_tags,
+        "labels": labels,
+    }
     df = pd.DataFrame(data=data)
-    df = df.fillna(method='ffill')
+    df = df.fillna(method="ffill")
     return df
 
-def flat_list(t): return [item for sublist in t for item in sublist]
+
+def flat_list(t):
+    return [item for sublist in t for item in sublist]
+
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("device: ", device)
@@ -63,9 +89,15 @@ train_getter = SentenceGetter(df_train)
 test_getter = SentenceGetter(df_test)
 
 tags_vals = list(set(df_train["tag"].values))
-train_sentences = [' '.join([s[0] for s in sent]) for sent in train_getter.sentences]
-test_sentences = [' '.join([s[0] for s in sent]) for sent in test_getter.sentences]
-train_labels_from_df = [[s[1] for s in sent] for sent in train_getter.sentences]
+train_sentences = [
+    " ".join([s[0] for s in sent]) for sent in train_getter.sentences
+]
+test_sentences = [
+    " ".join([s[0] for s in sent]) for sent in test_getter.sentences
+]
+train_labels_from_df = [
+    [s[1] for s in sent] for sent in train_getter.sentences
+]
 test_labels_from_df = [[s[1] for s in sent] for sent in test_getter.sentences]
 train_labels = list(map(flat_list, train_labels_from_df))
 test_labels = list(map(flat_list, test_labels_from_df))
@@ -76,11 +108,11 @@ test_labels = list(map(flat_list, test_labels_from_df))
 MAX_LEN = 512
 TRAIN_BATCH_SIZE = 8
 VALID_BATCH_SIZE = 8
-WEIGHT_DECAY=0.1
+WEIGHT_DECAY = 0.1
 EPOCHS = 3
 LEARNING_RATE = 2e-05
 
-#test_labels = train_labels  # afirmo que usan las mismas labels
+# test_labels = train_labels  # afirmo que usan las mismas labels
 
 print(f"TRAIN Dataset: {len(train_sentences)} sentences")
 print(f"TEST Dataset: {len(test_sentences)} sentences")
@@ -106,31 +138,35 @@ testing_loader = DataLoader(testing_set, **test_params)
 model = BERTClass(len(TAGS))
 model.to(device)
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+optimizer = torch.optim.AdamW(
+    model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+)
+
 
 def train(epoch):
     model.train()
-    for _,data in enumerate(training_loader):
-        ids = data['ids'].to(device, dtype = torch.long)
-        mask = data['mask'].to(device, dtype = torch.long)
-        targets = data['tags'].to(device, dtype = torch.long)
+    for _, data in enumerate(training_loader):
+        ids = data["ids"].to(device, dtype=torch.long)
+        mask = data["mask"].to(device, dtype=torch.long)
+        targets = data["tags"].to(device, dtype=torch.long)
 
         model.zero_grad()
         optimizer.zero_grad()
-        
-        loss = model(ids, mask, labels = targets)[0]
+
+        loss = model(ids, mask, labels=targets)[0]
 
         loss.backward()
         optimizer.step()
-        
-        if _%500==0: print(f'Epoch: {epoch}, Loss:  {loss.item()}')
-        
 
-for e in tqdm(range(EPOCHS), desc='Training Model'):
+        if _ % 500 == 0:
+            print(f"Epoch: {epoch}, Loss:  {loss.item()}")
+
+
+for e in tqdm(range(EPOCHS), desc="Training Model"):
     train(e)
 
 
-model.save_pretrained('betoNER/')
+model.save_pretrained("betoNER/")
 
 
 # Evaluation
@@ -193,4 +229,4 @@ def valid(model, testing_loader):
         print(f"F1-Score: {f1_score(y_true, y_pred)}")
 
 
-#valid(model, testing_loader)
+# valid(model, testing_loader)
