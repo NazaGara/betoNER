@@ -94,32 +94,35 @@ model = BertForTokenClassification.from_pretrained(
 
 from datasets import load_dataset, load_metric, Dataset
 
-metric = load_metric("f1")
-
-
-def tokenize_function(example):
+def tokenize_and_align_labels(examples):
     """
-    Funcion para tokenizar las palabras, notar que lo hace por palbra, no 
-    por sentencia. Usada junto al map de los Dataset, retorna otro Dataset, que
-    ahora contiene token_ids y attention_mask.
+    Funcion para tokenizar las sentencias, ademas de alinear palabras con los 
+    labels. Usada junto al map de los Dataset, retorna otro Dataset, que
+    ahora contiene labels, token_ids y attention_mask.
     """
-    return tokenizer(
-        example["tokens"],
-        is_split_into_words=True,
-        truncation=True,
-        max_length=MAX_LEN,
-        padding="max_length",
-    )
+    tokenized_inputs = tokenizer(examples["tokens"],
+                                truncation=True,
+                                is_split_into_words=True,
+                                max_length=MAX_LEN,                                                     
+                                padding="max_length")
 
+    labels = []
+    for i, label in enumerate(examples[f"ner_tags"]):
+        word_ids = tokenized_inputs.word_ids(batch_index=i)  # Map tokens to their respective word.
+        previous_word_idx = None
+        label_ids = []
+        for word_idx in word_ids:  # Set the special tokens to -100.
+            if word_idx is None:
+                label_ids.append(-100)
+            elif word_idx != previous_word_idx:  # Only label the first token of a given word.
+                label_ids.append(label[word_idx])
+            else:
+                label_ids.append(tag2id['INWORD_TOKEN'])
+            previous_word_idx = word_idx
+        labels.append(label_ids)
 
-def extend_labels(example):
-    k = len(example["labels"])
-    if k > MAX_LEN:  # truncation
-        example["labels"] = example["labels"][:MAX_LEN]
-        return example
-    else:  # padding with zeros
-        example["labels"].extend([0 for _ in range(MAX_LEN - k)])
-        return example
+    tokenized_inputs["labels"] = labels
+    return tokenized_inputs
 
 
 from transformers.trainer_utils import EvalPrediction
@@ -155,31 +158,18 @@ def compute_metrics(pred: EvalPrediction):
     return {"accuracy": acc, "f1": f1}
 
 
-train_ds, test_ds = load_dataset(
-    "conll2002", "es", split=[f"train[:{PERC}%]", f"test[:{PERC}%]"]
+train_ds, test_ds, valid_ds = load_dataset(
+    "conll2002", "es", split=[f"train[:{PERC}%]", f"test[:{PERC}%]", f"validation[:{PERC}%]"]
 )
-train_ds, test_ds = train_ds.rename_column(
-    "ner_tags", "labels"
-), test_ds.rename_column("ner_tags", "labels")
 
-train_ds = train_ds.map(
-    tokenize_function, batched=True, remove_columns=["id", "pos_tags"]
-)  # Dejar tokens por el len
-test_ds = test_ds.map(
-    tokenize_function, batched=True, remove_columns=["id", "pos_tags"]
-)  # Dejar tokens por el len
-
-train_ds = train_ds.map(extend_labels)  # , batched=True)
-test_ds = test_ds.map(extend_labels)  # , batched=True)
+train_ds = train_ds.map(tokenize_and_align_labels, batched=True, remove_columns=['id', 'pos_tags', 'ner_tags'])
+test_ds = test_ds.map(tokenize_and_align_labels, batched=True, remove_columns=['id', 'pos_tags', 'ner_tags'])
 
 from transformers import DataCollatorWithPadding, TrainingArguments, Trainer
 
 data_collator = DataCollatorWithPadding(
     tokenizer=tokenizer, padding="max_length", max_length=MAX_LEN
 )
-# Supuestamente con el dataCollator deberia de hacerse dinamico y mas liviano
-# en memoria, pero no funcionaba. La idea es postergar lo mas posible el
-# padding.
 
 training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
@@ -198,7 +188,7 @@ trainer = Trainer(
     model,
     training_args,
     train_dataset=train_ds,
-    eval_dataset=train_ds, #test_ds,
+    eval_dataset=train_ds,
     optimizers=(torch.optim.AdamW(model.parameters()), None),
     data_collator=data_collator,
     tokenizer=tokenizer,
