@@ -16,12 +16,6 @@ from torch.utils.data import (
     RandomSampler,
     SequentialSampler,
 )
-from torch.utils.data import (
-    Dataset,
-    DataLoader,
-    RandomSampler,
-    SequentialSampler,
-)
 from classes import CustomDataset, SentenceGetter, BERTClass
 
 # Pre Processing
@@ -83,12 +77,12 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 # model = AutoModelForMaskedLM.from_pretrained("dccuchile/bert-base-spanish-wwm-cased")
 
-MAX_LEN = 200  # el origianl estaba en 200, pero creo que el maximo que tengo es de 261
-TRAIN_BATCH_SIZE = (
-    8  # aca tuve que bajarle un poco al batch size, sino se rompia
-)
+# el origianl estaba en 200, pero creo que el maximo que tengo es de 512
+MAX_LEN = 512
+# aca tuve que bajarle un poco al batch size, sino se rompia
+TRAIN_BATCH_SIZE = 8
 VALID_BATCH_SIZE = 8
-EPOCHS = 5
+EPOCHS = 3
 LEARNING_RATE = 2e-05
 
 test_labels = train_labels  # afirmo que usan las mismas labels
@@ -119,7 +113,6 @@ model.to(device)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
-
 def train(epoch):
     model.train()
     for _, data in enumerate(training_loader):
@@ -127,17 +120,15 @@ def train(epoch):
         mask = data["mask"].to(device, dtype=torch.long)
         targets = data["tags"].to(device, dtype=torch.long)
 
+        optimizer.zero_grad()
         loss = model(ids, mask, labels=targets)[0]
+        loss.backward()
+        optimizer.step()
 
         # optimizer.zero_grad()
         if _ % 500 == 0:
             print(f"Epoch: {epoch}, Loss:  {loss.item()}")
 
-        # TO DO: probar con actualizar pesos luego
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        # loss.backward()
 
 
 for e in range(EPOCHS):
