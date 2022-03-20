@@ -36,8 +36,12 @@ tag2id = {t: i for i, t in enumerate(TAGS)}
 id2tag = {i: t for i, t in enumerate(TAGS)}
 
 # Pre Processing
+checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(
-    "dccuchile/bert-base-spanish-wwm-cased", num_labels=len(TAGS)
+    checkpoint, num_labels=len(TAGS)
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    checkpoint, num_labels=len(TAGS)
 )
 
 
@@ -135,9 +139,9 @@ test_params = {
 training_loader = DataLoader(training_set, **train_params)
 testing_loader = DataLoader(testing_set, **test_params)
 
-model = BERTClass(len(TAGS))
-model.to(device)
+#model = BERTClass(len(TAGS))
 
+model.to(device)
 optimizer = torch.optim.AdamW(
     model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
 )
