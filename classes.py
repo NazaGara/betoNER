@@ -9,7 +9,8 @@ class SentenceGetter(object):
         agg_func = lambda s: [
             (w, t)
             for w, t in zip(
-                s["word"].values.tolist(), s["labels"].values.tolist()
+                s["word"].values.tolist(), 
+                s["labels"].values.tolist()
             )
         ]
         self.grouped = self.dataset.groupby("sentence_id").apply(agg_func)
@@ -44,9 +45,8 @@ class CustomDataset(Dataset):
             None,
             add_special_tokens=True,
             max_length=self.max_len,
-            # pad_to_max_length=True,
             truncation=True,
-            padding="max_length",  # esto deberia de arreglar el warning de la linea de arriba
+            padding="max_length", 
             return_token_type_ids=True,
         )
         ids = inputs["input_ids"]
