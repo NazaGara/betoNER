@@ -32,7 +32,7 @@ parser.add_argument(
     type=int,
     metavar="PERCENTAGE",
     help="Percentage of training samples",
-    default=10,
+    default=5,
 )
 parser.add_argument(
     "--epochs",
@@ -104,10 +104,8 @@ tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(TAGS))
 model = BertForTokenClassification.from_pretrained(
     checkpoint, num_labels=len(TAGS)
 )
-# model = AutoModelForMaskedLM.from_pretrained(checkpoint, num_labels=AMOUNT_TAGS)
 
 from datasets import load_dataset, load_metric, Dataset
-
 
 def tokenize_and_align_labels(examples):
     """
@@ -117,10 +115,10 @@ def tokenize_and_align_labels(examples):
     """
     tokenized_inputs = tokenizer(
         examples["tokens"],
-        truncation=True,
         is_split_into_words=True,
-        max_length=MAX_LEN,
-        padding="max_length",
+        truncation=True,
+        # max_length=MAX_LEN,
+        # padding="max_length",
     )
 
     labels = []
@@ -147,10 +145,10 @@ def tokenize_and_align_labels(examples):
 
 
 from transformers.trainer_utils import EvalPrediction
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 def flat_list(t):
     return [item for sublist in t for item in sublist]
+
 
 def compute_metrics(pred: EvalPrediction):
     """
@@ -158,11 +156,13 @@ def compute_metrics(pred: EvalPrediction):
     precision y el f1-score. La 2da metrica es mejor cuando los datos tienen
     mas desiguladad en las labels.
     """
-    metric = load_metric('f1')
+    metric = load_metric("f1")
     logits, labels = pred
     predictions = np.argmax(logits, axis=-1)
     flat_labels, flat_preds = flat_list(labels), flat_list(predictions)
-    return metric.compute(predictions=flat_preds, references=flat_labels, average='micro')
+    return metric.compute(
+        predictions=flat_preds, references=flat_labels, average="micro"
+    )
 
 
 train_ds, test_ds, valid_ds = load_dataset(
@@ -182,11 +182,18 @@ test_ds = test_ds.map(
     remove_columns=["id", "pos_tags", "ner_tags"],
 )
 
-from transformers import DataCollatorWithPadding, TrainingArguments, Trainer
-
-data_collator = DataCollatorWithPadding(
-    tokenizer=tokenizer, padding="max_length", max_length=MAX_LEN
+from transformers import (
+    DataCollatorWithPadding,
+    TrainingArguments,
+    Trainer,
+    DataCollatorForTokenClassification,
 )
+
+# data_collator = DataCollatorWithPadding(
+#    tokenizer=tokenizer, padding="max_length", max_length=MAX_LEN
+# )
+data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
+
 
 training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
@@ -197,7 +204,7 @@ training_args = TrainingArguments(
     num_train_epochs=EPOCHS,
     learning_rate=LEARNING_RATE,
     weight_decay=0.1,
-    group_by_length=True,
+    # group_by_length=True,
 )
 
 
@@ -205,11 +212,11 @@ trainer = Trainer(
     model,
     training_args,
     train_dataset=train_ds,
-    eval_dataset=train_ds,
+    eval_dataset=test_ds,
     optimizers=(torch.optim.AdamW(model.parameters()), None),
     data_collator=data_collator,
     tokenizer=tokenizer,
-    compute_metrics=compute_metrics,
+    # compute_metrics=compute_metrics,
 )
 
 trainer.train()
@@ -231,27 +238,28 @@ def evaluate(ds: Dataset):
     """
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
-    labels = np.array(ds["labels"], dtype=object)
-    unpadding_labels, unpadding_preds = [], []
-    for i, s in enumerate(ds["tokens"]):
-        k = len(s)
-        unpadding_labels.append(labels[i][:k])
-        unpadding_preds.append(preds[i][:k])
+    labels = predictions.label_ids #np.array(ds["labels"], dtype=object)
+    flat_preds = flat_list(preds)
+    flat_labels =flat_list(labels)
 
-    flat_preds = [
-        item for label_list in unpadding_preds for item in label_list
-    ]
-    flat_labels = [
-        item for label_list in unpadding_labels for item in label_list
-    ]
-    print(
-        f"Length predictions:{len(flat_preds)}, Length labels: {len(flat_labels)}"
-    )
+    assert(len(flat_preds)==len(flat_labels))
 
     f1 = f1_score(flat_labels, flat_preds, average="micro")
     acc = accuracy_score(flat_labels, flat_preds)
-    return {"accuracy": acc, "f1": f1}
+    metric = load_metric('f1')
+    f1_hf =  metric.compute(predictions=flat_preds, references=flat_labels, average='micro')
+    return {"accuracy": acc, "f1": f1, "f1_HF" : f1_hf}
 
 
-results = evaluate(train_ds)
-print(f"Results obtained: {results}")
+#results = evaluate(test_ds)
+#print(f"Results obtained: {results}")
+
+print('\n\n')
+predictions = trainer.predict(train_ds)
+preds = predictions.predictions.argmax(-1)
+
+print(preds[0], preds[1])
+
+with open('results/prueba.txt', '+a') as f:
+    f.write(preds)
+
