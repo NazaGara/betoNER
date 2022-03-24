@@ -8,10 +8,7 @@ class SentenceGetter(object):
         self.empty = False
         agg_func = lambda s: [
             (w, t)
-            for w, t in zip(
-                s["word"].values.tolist(), 
-                s["labels"].values.tolist()
-            )
+            for w, t in zip(s["word"].values.tolist(), s["labels"].values.tolist())
         ]
         self.grouped = self.dataset.groupby("sentence_id").apply(agg_func)
         self.sentences = [s for s in self.grouped]
@@ -46,7 +43,7 @@ class CustomDataset(Dataset):
             add_special_tokens=True,
             max_length=self.max_len,
             truncation=True,
-            padding="max_length", 
+            padding="max_length",
             return_token_type_ids=True,
         )
         ids = inputs["input_ids"]

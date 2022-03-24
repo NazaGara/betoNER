@@ -1,12 +1,13 @@
 import torch
 import pandas as pd
 import numpy as np
+import argparse
 from conllu import parse_incr
 from tqdm import tqdm
 from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
-    AutoModelForTokenClassification,    
+    AutoModelForTokenClassification,
 )
 from torch.utils.data import (
     Dataset,
@@ -17,6 +18,7 @@ from torch.utils.data import (
 from classes import CustomDataset, SentenceGetter, BERTClass
 
 import torch.nn as nn
+
 IGNORE_INDEX = nn.CrossEntropyLoss().ignore_index
 INWORD_PAD_LABEL = "PAD"
 LABEL_LIST = [
@@ -34,9 +36,7 @@ LABEL_LIST = [
 LABEL_MAP = {label: i for i, label in enumerate(LABEL_LIST)}
 LABEL_MAP[INWORD_PAD_LABEL] = IGNORE_INDEX
 
-parser = argparse.ArgumentParser(
-    description="Train using Pytorch tensors!"
-)
+parser = argparse.ArgumentParser(description="Train using Pytorch tensors!")
 parser.add_argument(
     "output",
     type=str,
@@ -66,11 +66,9 @@ BATCH_SIZE = args.batch_size
 
 # Pre Processing
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
-tokenizer = AutoTokenizer.from_pretrained(
-    checkpoint, num_labels=len(TAGS)
-)
+tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(TAGS))
 model = AutoModelForTokenClassification.from_pretrained(
-    checkpoint, finetuning_task="conll2002",num_labels=len(TAGS)
+    checkpoint, finetuning_task="conll2002", num_labels=len(TAGS)
 )
 
 
@@ -85,8 +83,11 @@ def read_conllu(file_name: str):
             words.append(token_lists[i][j]["word"])
             words_tags.append(token_lists[i][j]["tag"])
 
-            tokenized = tokenizer.tokenize(token_lists[i][j]['word'])
-            labels += [[LABEL_MAP[token_lists[i][j]['tag']]] + [LABEL_MAP[INWORD_PAD_LABEL]] * (len(tokenized) - 1)]
+            tokenized = tokenizer.tokenize(token_lists[i][j]["word"])
+            labels += [
+                [LABEL_MAP[token_lists[i][j]["tag"]]]
+                + [LABEL_MAP[INWORD_PAD_LABEL]] * (len(tokenized) - 1)
+            ]
 
             if token_lists[i][j]["id"] == 0:
                 sen_idx.append(f"sentence {c}")
@@ -108,6 +109,7 @@ def read_conllu(file_name: str):
 def flat_list(t):
     return [item for sublist in t for item in sublist]
 
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("device: ", device)
 
@@ -118,15 +120,9 @@ train_getter = SentenceGetter(df_train)
 test_getter = SentenceGetter(df_test)
 
 tags_vals = list(set(df_train["tag"].values))
-train_sentences = [
-    " ".join([s[0] for s in sent]) for sent in train_getter.sentences
-]
-test_sentences = [
-    " ".join([s[0] for s in sent]) for sent in test_getter.sentences
-]
-train_labels_from_df = [
-    [s[1] for s in sent] for sent in train_getter.sentences
-]
+train_sentences = [" ".join([s[0] for s in sent]) for sent in train_getter.sentences]
+test_sentences = [" ".join([s[0] for s in sent]) for sent in test_getter.sentences]
+train_labels_from_df = [[s[1] for s in sent] for sent in train_getter.sentences]
 test_labels_from_df = [[s[1] for s in sent] for sent in test_getter.sentences]
 train_labels = list(map(flat_list, train_labels_from_df))
 test_labels = list(map(flat_list, test_labels_from_df))
@@ -162,14 +158,14 @@ test_params = {
 training_loader = DataLoader(training_set, **train_params)
 testing_loader = DataLoader(testing_set, **test_params)
 
-#model = BERTClass(len(TAGS))
+# model = BERTClass(len(TAGS))
 
 model.to(device)
-WARMUP_STEPS=100
+WARMUP_STEPS = 100
 total_steps = len(training_loader) * EPOCHS
-optimizer = torch.optim.AdamW(model.parameters(),
-                            lr=LEARNING_RATE,
-                            weight_decay=WEIGHT_DECAY)
+optimizer = torch.optim.AdamW(
+    model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+)
 scheduler = get_linear_schedule_with_warmup(
     optimizer,
     num_warmup_steps=int(WARMUP_STEPS * total_steps),  # warmup is a %
@@ -207,33 +203,40 @@ model.save_pretrained(OUTPUT_DIR)
 
 from seqeval.metrics import f1_score
 
+
 def flat_accuracy(preds, labels):
     flat_preds = np.argmax(preds, axis=2).flatten()
     flat_labels = labels.flatten()
 
-    with open(f'{OUTPUT_DIR}/preds', '+a') as f:
-        for item in flat_preds: f.write("%s\n" % item)
-        
-    with open(f'{OUTPUT_DIR}/labels', '+a') as f:
-        for item in flat_labels: f.write("%s\n" % item)
+    with open(f"{OUTPUT_DIR}/preds", "+a") as f:
+        for item in flat_preds:
+            f.write("%s\n" % item)
+
+    with open(f"{OUTPUT_DIR}/labels", "+a") as f:
+        for item in flat_labels:
+            f.write("%s\n" % item)
 
     return np.sum(flat_preds == flat_labels) / len(flat_labels)
 
+
 model.eval()
-eval_loss = 0; eval_accuracy = 0
-n_correct = 0; n_wrong = 0; total = 0
-predictions , true_labels = [], []
+eval_loss = 0
+eval_accuracy = 0
+n_correct = 0
+n_wrong = 0
+total = 0
+predictions, true_labels = [], []
 nb_eval_steps, nb_eval_examples = 0, 0
 with torch.no_grad():
-    for data in tqdm(training_loader, desc='Evaluation'):
-        ids = data['ids'].to(device, dtype = torch.long)
-        mask = data['mask'].to(device, dtype = torch.long)
-        targets = data['tags'].to(device, dtype = torch.long)
+    for data in tqdm(training_loader, desc="Evaluation"):
+        ids = data["ids"].to(device, dtype=torch.long)
+        mask = data["mask"].to(device, dtype=torch.long)
+        targets = data["tags"].to(device, dtype=torch.long)
 
         output = model(ids, mask, labels=targets)
         loss, logits = output[:2]
         logits = logits.detach().cpu().numpy()
-        label_ids = targets.to('cpu').numpy()
+        label_ids = targets.to("cpu").numpy()
         predictions.extend([list(p) for p in np.argmax(logits, axis=2)])
         true_labels.append(label_ids)
         accuracy = flat_accuracy(logits, label_ids)
@@ -241,9 +244,10 @@ with torch.no_grad():
         eval_accuracy += accuracy
         nb_eval_examples += ids.size(0)
         nb_eval_steps += 1
-    eval_loss = eval_loss/nb_eval_steps
+    eval_loss = eval_loss / nb_eval_steps
     print(f"Validation loss: {format(eval_loss)}")
     print(f"Validation Accuracy: {format(eval_accuracy/nb_eval_steps)}")
+
 
 def valid(model, testing_loader):
     model.eval()
@@ -292,4 +296,3 @@ def valid(model, testing_loader):
         # pred_tags = [tags_vals[p_i] for p in predictions for p_i in p]
         # valid_tags = [tags_vals[l_ii] for l in true_labels for l_i in l for l_ii in l_i]
         print(f"F1-Score: {f1_score(y_true, y_pred)}")
-

@@ -49,38 +49,20 @@ parser.add_argument(
     default=2e-5,
 )
 parser.add_argument(
-    "--train_batch_size",
+    "--batch_size",
     type=int,
-    metavar="TRAIN_BACTH_SIZE",
-    help="Batch size in training stage",
-    default=8,
-)
-parser.add_argument(
-    "--test_batch_size",
-    type=int,
-    metavar="TEST_BACTH_SIZE",
+    metavar="BATCH_SIZE",
     help="Batch size in test stage",
     default=8,
 )
 
 args = parser.parse_args()
 
-OUTPUT_DIR = f"results/{args.output}"
-MAX_LEN = args.maxlength
-PERC = args.percentage
-EPOCHS = args.epochs
-LEARNING_RATE = args.lr
-TRAIN_BACTH_SIZE = args.train_batch_size
-TEST_BACTH_SIZE = args.test_batch_size
+import torch.nn as nn
 
-
-# TODO
-# -> intentar overfittear para un cjto del train
-# -> seguir insistiendo con el padding para que se haga dinamico
-# -> probar diferentes batch sizes, tambien por parametros
-# -> Parametros para guardar el modelo final ✓
-
-TAGS = [
+IGNORE_INDEX = nn.CrossEntropyLoss().ignore_index
+INWORD_PAD_LABEL = "PAD"
+LABEL_LIST = [
     "O",
     "B-PER",
     "I-PER",
@@ -90,22 +72,35 @@ TAGS = [
     "I-LOC",
     "B-MISC",
     "I-MISC",
-    "INWORD_TOKEN",
 ]
-tag2id = {t: i for i, t in enumerate(TAGS)}
-id2tag = {i: t for i, t in enumerate(TAGS)}
 
+LABEL_MAP = {label: i for i, label in enumerate(LABEL_LIST)}
+LABEL_MAP[INWORD_PAD_LABEL] = IGNORE_INDEX
+
+OUTPUT_DIR = f"results/{args.output}"
+MAX_LEN = args.maxlength
+PERC = args.percentage
+EPOCHS = args.epochs
+LEARNING_RATE = args.lr
+BATCH_SIZE = args.batch_size
+
+
+# TODO
+# -> intentar overfittear para un cjto del train
+# -> seguir insistiendo con el padding para que se haga dinamico
+# -> probar diferentes batch sizes, tambien por parametros
+# -> Parametros para guardar el modelo final ✓
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print("device: ", device)
+print(f"device: {device}")
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
-tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(TAGS))
+tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
 model = BertForTokenClassification.from_pretrained(
-    checkpoint, num_labels=len(TAGS)
+    checkpoint, num_labels=len(LABEL_LIST)
 )
-
 from datasets import load_dataset, load_metric, Dataset
+
 
 def tokenize_and_align_labels(examples):
     """
@@ -130,13 +125,13 @@ def tokenize_and_align_labels(examples):
         label_ids = []
         for word_idx in word_ids:  # Set the special tokens to -100.
             if word_idx is None:
-                label_ids.append(-100)
+                label_ids.append(IGNORE_INDEX)
             elif (
                 word_idx != previous_word_idx
             ):  # Only label the first token of a given word.
                 label_ids.append(label[word_idx])
             else:
-                label_ids.append(tag2id["INWORD_TOKEN"])
+                label_ids.append(IGNORE_INDEX)
             previous_word_idx = word_idx
         labels.append(label_ids)
 
@@ -146,7 +141,8 @@ def tokenize_and_align_labels(examples):
 
 from transformers.trainer_utils import EvalPrediction
 
-def flat_list(t):
+
+def flat_list(t: list):
     return [item for sublist in t for item in sublist]
 
 
@@ -181,7 +177,11 @@ test_ds = test_ds.map(
     batched=True,
     remove_columns=["id", "pos_tags", "ner_tags"],
 )
-
+valid_ds = valid_ds.map(
+    tokenize_and_align_labels,
+    batched=True,
+    remove_columns=["id", "pos_tags", "ner_tags"],
+)
 from transformers import (
     DataCollatorWithPadding,
     TrainingArguments,
@@ -199,11 +199,12 @@ training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
     eval_accumulation_steps=1,
     evaluation_strategy="epoch",
-    per_device_train_batch_size=TRAIN_BACTH_SIZE,
-    per_device_eval_batch_size=TEST_BACTH_SIZE,
+    per_device_train_batch_size=BATCH_SIZE,
+    per_device_eval_batch_size=BATCH_SIZE,
     num_train_epochs=EPOCHS,
     learning_rate=LEARNING_RATE,
     weight_decay=0.1,
+    warmup_steps=200,
     # group_by_length=True,
 )
 
@@ -238,28 +239,26 @@ def evaluate(ds: Dataset):
     """
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
-    labels = predictions.label_ids #np.array(ds["labels"], dtype=object)
+    labels = predictions.label_ids  # np.array(ds["labels"], dtype=object)
     flat_preds = flat_list(preds)
-    flat_labels =flat_list(labels)
+    flat_labels = flat_list(labels)
 
-    assert(len(flat_preds)==len(flat_labels))
+    assert len(flat_preds) == len(flat_labels)
 
     f1 = f1_score(flat_labels, flat_preds, average="micro")
     acc = accuracy_score(flat_labels, flat_preds)
-    metric = load_metric('f1')
-    f1_hf =  metric.compute(predictions=flat_preds, references=flat_labels, average='micro')
-    return {"accuracy": acc, "f1": f1, "f1_HF" : f1_hf}
+    metric = load_metric("f1")
+    f1_hf = metric.compute(
+        predictions=flat_preds, references=flat_labels, average="micro"
+    )
+    return {"accuracy": acc, "f1": f1, "f1_HF": f1_hf}
 
 
-#results = evaluate(test_ds)
-#print(f"Results obtained: {results}")
+results = evaluate(test_ds)
+print(f"Results obtained: {results}")
 
-print('\n\n')
+print("\n\n")
 predictions = trainer.predict(train_ds)
 preds = predictions.predictions.argmax(-1)
 
 print(preds[0], preds[1])
-
-with open('results/prueba.txt', '+a') as f:
-    f.write(preds)
-
