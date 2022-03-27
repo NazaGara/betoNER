@@ -8,6 +8,7 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
     AutoModelForTokenClassification,
+    BertForTokenClassification,
 )
 from torch.utils.data import (
     Dataset,
@@ -19,6 +20,10 @@ from torch.utils.data import (
 from classes import CustomDataset, SentenceGetter, BERTClass
 
 import torch.nn as nn
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Device: {device}")
+
 
 IGNORE_INDEX = nn.CrossEntropyLoss().ignore_index
 INWORD_PAD_LABEL = "PAD"
@@ -81,17 +86,22 @@ Example = namedtuple("Example", ["tokens", "labels", "prediction_mask"])
 
 
 def read_conllu(file_name: str):
-    f = open(f"{file_name}.conllu", "r", encoding="utf-8")
-    token_lists = list(parse_incr(f, fields=["id", "word", "tag"]))
-    f.close()
-    # words, words_tags = [], []
+    """
+    Reads a file writted in the form of a conll file, this means:
+    <word> <tag>
+    on each line of the file. It creates two lists, one with each word tokenized
+    using the pretrained tokenizer and the labels of each word.
+    In case that a word, when tokenized, split into different words
+    (i.e. the tokenizer uses subword tokenization), then the label will match
+    only the first subword, and the rest will be tagged as 'PAD' and ignored in
+    the training phase.
+    """
+    with open(f"{file_name}.conllu", "r", encoding="utf-8") as f:
+        token_lists = list(parse_incr(f, fields=["id", "word", "tag"]))
     tokens, labels = [], []
     for i, tl in tqdm(enumerate(token_lists), desc="parsing input"):
         for j, _ in enumerate(tl):
-
             id = token_lists[i][j]
-            # words.append(id['word'])
-            # words_tags.append(id['tag'])
 
             tokenized = tokenizer.tokenize(id["word"])
             tokens += tokenized
@@ -101,16 +111,23 @@ def read_conllu(file_name: str):
 
 
 def generate_examples(tokens: list, labels: list):
+    """
+    Generate a list of examples from the tokenized words and labels.
+    """
     half_len = MAX_LEN // 2
     examples = []
-    for i in tqdm(range(0, len(tokens) - half_len, half_len), desc="Creating examples"):
+    for i in tqdm(
+        range(0, len(tokens) - half_len, half_len), desc="Creating examples"
+    ):
         token_window = tokens[i : i + 2 * half_len]
         label_window = labels[i : i + 2 * half_len]
 
         if i == 0:
             prediction_mask = [1] * 2 * half_len
         else:
-            prediction_mask = [0] * half_len + [1] * (len(token_window) - half_len)
+            prediction_mask = [0] * half_len + [1] * (
+                len(token_window) - half_len
+            )
 
         assert len(token_window) == len(label_window) == len(prediction_mask)
         example = Example(token_window, label_window, prediction_mask)
@@ -118,7 +135,11 @@ def generate_examples(tokens: list, labels: list):
     return examples
 
 
-def create_dataset(examples: Example):
+def create_dataset(examples: list[Example]):
+    """
+    It creates a TensorDataset (by torch) from a list with the examples
+    created before.
+    """
     input_ids, labels, prediction_masks = [], [], []
     for i, (tokens, ex_labels, prediction_mask) in enumerate(
         tqdm(examples, desc="Converting examples")
@@ -154,6 +175,11 @@ from torch.optim import AdamW  # Aca cambie el Adam, por AdamW
 
 
 def pre_train(dataset: TensorDataset):
+    """
+    Function that creates a DataLoader object from a torch Dataset, specifies
+    the number of steps to train the model and instanciates an AdamW optimizer
+    and a scheduler usign the specified parameters in the arguments.
+    """
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
     total_steps = len(dataloader) * 3
 
@@ -176,7 +202,9 @@ def pre_train(dataset: TensorDataset):
             "weight_decay": WEIGHT_DECAY,
         },
     ]
-    optimizer = AdamW(grouped_parameters, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    optimizer = AdamW(
+        grouped_parameters, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+    )
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
         num_warmup_steps=int(50 * total_steps),  # warmup is a %
@@ -186,11 +214,13 @@ def pre_train(dataset: TensorDataset):
 
 
 def train(dataloader: DataLoader, optimizer: AdamW, scheduler: LambdaLR):
+    """Funcion que entrna el modelo 'model' usando el DataLoader, optimizador
+    y scheduler especificado"""
     global_step, tr_loss, running_loss = 0, 0.0, 0.0
     model.to(device)
     model.train()
     for _ in tqdm(range(EPOCHS), desc="Epoch"):
-        for step, batch in enumerate(dataloader):
+        for _, batch in enumerate(dataloader):
             batch = [t.to(device) for t in batch]
 
             model.zero_grad()
@@ -216,12 +246,13 @@ def train(dataloader: DataLoader, optimizer: AdamW, scheduler: LambdaLR):
 
 
 def main():
-    train_tokens, train_labels = read_conllu("train")
-    test_tokens, test_labels = read_conllu("test")
+    train_tokens, train_labels = read_conllu("data/conll/train")
+    test_tokens, test_labels = read_conllu("data/conll/test")
 
     train_examples = generate_examples(train_tokens, train_labels)
     test_examples = generate_examples(test_tokens, test_labels)
 
+    # solo quiero entrenar con una fraccion del dataset, para overfittear
     frac = len(train_examples) // 10
     train_examples = train_examples[:frac]
 
@@ -251,10 +282,9 @@ def main():
             label_ids = labels.to("cpu").numpy()
 
     predictions = logits.argmax(-1)
-    print(predictions.shape)
+    print(f"Prediciton shape: {predictions.shape}\n")
     print(predictions[0])
-    print(predictions[1])
-    print(predictions[2])
+    print(label_ids[0])
 
 
 if __name__ == "__main__":
