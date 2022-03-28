@@ -7,7 +7,14 @@ from transformers import (
     AutoModelForMaskedLM,
     AutoModelForTokenClassification,
     AutoTokenizer,
+    TrainingArguments,
+    Trainer,
+    DataCollatorForTokenClassification,
 )
+
+from datasets import load_dataset, load_metric, Dataset
+from transformers.trainer_utils import EvalPrediction
+import json
 
 parser = argparse.ArgumentParser(
     description="Train using Trainer Class from Huggingface!"
@@ -20,7 +27,7 @@ parser.add_argument(
     #    default="betoNER-finetuned-CONLL",
 )
 parser.add_argument(
-    "--maxlength",
+    "--max_len",
     type=int,
     metavar="MAX LEN",
     help="Maximum length of tokens",
@@ -30,36 +37,34 @@ parser.add_argument(
     "--percentage",
     type=int,
     metavar="PERCENTAGE",
-    help="Percentage of training samples",
-    default=5,
+    help="Percentage of training dataset",
+    default=10,
 )
 parser.add_argument(
     "--epochs",
     type=int,
     metavar="EPOCHS",
-    help="number of epochs of training.",
+    help="Epochs of training.",
     default=3,
 )
 parser.add_argument(
     "--lr",
     type=float,
     metavar="LEARNING_RATE",
-    help="learning rate.",
+    help="learning rate to the AdamW optimizer.",
     default=2e-5,
 )
 parser.add_argument(
     "--batch_size",
     type=int,
     metavar="BATCH_SIZE",
-    help="Batch size in test stage",
+    help="Batch size",
     default=8,
 )
 
 args = parser.parse_args()
 
-import torch.nn as nn
-
-IGNORE_INDEX = nn.CrossEntropyLoss().ignore_index
+IGNORE_INDEX = torch.nn.CrossEntropyLoss().ignore_index
 INWORD_PAD_LABEL = "PAD"
 LABEL_LIST = [
     "O",
@@ -90,7 +95,7 @@ LABEL_MAP = {label: i for i, label in enumerate(LABEL_LIST)}
 LABEL_MAP[INWORD_PAD_LABEL] = IGNORE_INDEX
 
 OUTPUT_DIR = f"results/{args.output}"
-MAX_LEN = args.maxlength
+MAX_LEN = args.max_len
 PERC = args.percentage
 EPOCHS = args.epochs
 LEARNING_RATE = args.lr
@@ -103,6 +108,7 @@ BATCH_SIZE = args.batch_size
 # -> probar diferentes batch sizes, tambien por parametros ✓
 # -> Parametros para guardar el modelo final ✓
 
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"device: {device}")
 
@@ -111,7 +117,6 @@ tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST)
 model = AutoModelForTokenClassification.from_pretrained(
     checkpoint, num_labels=len(LABEL_LIST)
 )
-from datasets import load_dataset, load_metric, Dataset
 
 
 def tokenize_and_align_labels(examples):
@@ -151,9 +156,6 @@ def tokenize_and_align_labels(examples):
     return tokenized_inputs
 
 
-from transformers.trainer_utils import EvalPrediction
-
-
 def flat_list(t: list):
     return [item for sublist in t for item in sublist]
 
@@ -173,70 +175,6 @@ def compute_metrics(pred: EvalPrediction):
     )
 
 
-train_ds, test_ds, valid_ds = load_dataset(
-    "conll2002",
-    "es",
-    split=[f"train[:{PERC}%]", f"test[:{PERC}%]", f"validation[:{PERC}%]"],
-)
-
-train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
-test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
-valid_ds = valid_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
-
-
-train_ds = train_ds.map(
-    tokenize_and_align_labels,
-    batched=True,
-    remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
-)
-test_ds = test_ds.map(
-    tokenize_and_align_labels,
-    batched=True,
-    remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
-)
-valid_ds = valid_ds.map(
-    tokenize_and_align_labels,
-    batched=True,
-    remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
-)
-from transformers import (
-    TrainingArguments,
-    Trainer,
-    DataCollatorForTokenClassification,
-)
-
-data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
-
-training_args = TrainingArguments(
-    output_dir=OUTPUT_DIR,
-    logging_steps=50,
-    evaluation_strategy="epoch",
-    per_device_train_batch_size=BATCH_SIZE,
-    per_device_eval_batch_size=BATCH_SIZE,
-    num_train_epochs=EPOCHS,
-    learning_rate=LEARNING_RATE,
-    weight_decay=0.1,
-    warmup_steps=500,
-)
-
-
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_ds,
-    eval_dataset=test_ds,
-    data_collator=data_collator,
-    tokenizer=tokenizer,
-    compute_metrics=compute_metrics,
-)
-
-trainer.train()
-
-trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
-
-from sklearn.metrics import accuracy_score, f1_score
-
-
 def evaluate(ds: Dataset):
     """
     Para poder evaluar en base a un Dataset con el mismo formato que fue
@@ -249,11 +187,76 @@ def evaluate(ds: Dataset):
     flat_labels = flat_list(labels)
 
     assert len(flat_preds) == len(flat_labels)
-
-    f1 = f1_score(flat_labels, flat_preds, average="micro")
-    acc = accuracy_score(flat_labels, flat_preds)
     metric = load_metric("f1")
     f1_hf = metric.compute(
         predictions=flat_preds, references=flat_labels, average="micro"
     )
     return {"accuracy": acc, "f1": f1, "f1_HF": f1_hf}
+
+
+def dump_log(filename, trainer):
+    with open(f"{filename}", "+a") as f:
+        for obj in trainer.state.log_history:
+            json.dump(obj, f, indent=2)
+
+
+def main():
+    train_ds, test_ds, valid_ds = load_dataset(
+        "conll2002",
+        "es",
+        split=[f"train[:{PERC}%]", f"test[:{PERC}%]", f"validation[:{PERC}%]"],
+    )
+
+    train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    valid_ds = valid_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+
+    train_ds = train_ds.map(
+        tokenize_and_align_labels,
+        batched=True,
+        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
+    )
+    test_ds = test_ds.map(
+        tokenize_and_align_labels,
+        batched=True,
+        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
+    )
+    valid_ds = valid_ds.map(
+        tokenize_and_align_labels,
+        batched=True,
+        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
+    )
+
+    data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
+
+    training_args = TrainingArguments(
+        output_dir=OUTPUT_DIR,
+        logging_steps=50,
+        evaluation_strategy="epoch",
+        per_device_train_batch_size=BATCH_SIZE,
+        per_device_eval_batch_size=BATCH_SIZE,
+        num_train_epochs=EPOCHS,
+        learning_rate=LEARNING_RATE,
+        weight_decay=0.1,
+        warmup_steps=500,
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_ds,
+        eval_dataset=test_ds,
+        data_collator=data_collator,
+        tokenizer=tokenizer,
+        compute_metrics=compute_metrics,
+    )
+
+    trainer.train()
+
+    trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
+
+    dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
+
+
+if __name__ == "__main__":
+    main()
