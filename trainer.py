@@ -7,7 +7,6 @@ from transformers import (
     AutoModelForMaskedLM,
     AutoModelForTokenClassification,
     AutoTokenizer,
-    BertForTokenClassification,
 )
 
 parser = argparse.ArgumentParser(
@@ -74,6 +73,19 @@ LABEL_LIST = [
     "I-MISC",
 ]
 
+# LABEL_MAP = {
+#    "O": 0,
+#    "B-PER": 1,
+#    "I-PER": 2,
+#    "B-ORG": 3,
+#    "I-ORG": 4,
+#    "B-LOC": 5,
+#    "I-LOC": 6,
+#    "B-MISC": 7,
+#    "I-MISC": 8,
+# }
+
+
 LABEL_MAP = {label: i for i, label in enumerate(LABEL_LIST)}
 LABEL_MAP[INWORD_PAD_LABEL] = IGNORE_INDEX
 
@@ -87,8 +99,8 @@ BATCH_SIZE = args.batch_size
 
 # TODO
 # -> intentar overfittear para un cjto del train
-# -> seguir insistiendo con el padding para que se haga dinamico
-# -> probar diferentes batch sizes, tambien por parametros
+# -> seguir insistiendo con el padding para que se haga dinamico ✓
+# -> probar diferentes batch sizes, tambien por parametros ✓
 # -> Parametros para guardar el modelo final ✓
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -96,7 +108,7 @@ print(f"device: {device}")
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
-model = BertForTokenClassification.from_pretrained(
+model = AutoModelForTokenClassification.from_pretrained(
     checkpoint, num_labels=len(LABEL_LIST)
 )
 from datasets import load_dataset, load_metric, Dataset
@@ -167,67 +179,60 @@ train_ds, test_ds, valid_ds = load_dataset(
     split=[f"train[:{PERC}%]", f"test[:{PERC}%]", f"validation[:{PERC}%]"],
 )
 
+train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+valid_ds = valid_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+
+
 train_ds = train_ds.map(
     tokenize_and_align_labels,
     batched=True,
-    remove_columns=["id", "pos_tags", "ner_tags"],
+    remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
 )
 test_ds = test_ds.map(
     tokenize_and_align_labels,
     batched=True,
-    remove_columns=["id", "pos_tags", "ner_tags"],
+    remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
 )
 valid_ds = valid_ds.map(
     tokenize_and_align_labels,
     batched=True,
-    remove_columns=["id", "pos_tags", "ner_tags"],
+    remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
 )
 from transformers import (
-    DataCollatorWithPadding,
     TrainingArguments,
     Trainer,
     DataCollatorForTokenClassification,
 )
 
-# data_collator = DataCollatorWithPadding(
-#    tokenizer=tokenizer, padding="max_length", max_length=MAX_LEN
-# )
 data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
-
 
 training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
-    eval_accumulation_steps=1,
+    logging_steps=50,
     evaluation_strategy="epoch",
     per_device_train_batch_size=BATCH_SIZE,
     per_device_eval_batch_size=BATCH_SIZE,
     num_train_epochs=EPOCHS,
     learning_rate=LEARNING_RATE,
     weight_decay=0.1,
-    warmup_steps=200,
-    # group_by_length=True,
+    warmup_steps=500,
 )
 
 
 trainer = Trainer(
-    model,
-    training_args,
+    model=model,
+    args=training_args,
     train_dataset=train_ds,
     eval_dataset=test_ds,
-    optimizers=(torch.optim.AdamW(model.parameters()), None),
     data_collator=data_collator,
     tokenizer=tokenizer,
-    # compute_metrics=compute_metrics,
+    compute_metrics=compute_metrics,
 )
 
 trainer.train()
 
 trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
-
-# El tema de los metrics, no anda para nada, vemos por otro lado
-# metrics=trainer.evaluate()
-# print(metrics)
-
 
 from sklearn.metrics import accuracy_score, f1_score
 
@@ -252,13 +257,3 @@ def evaluate(ds: Dataset):
         predictions=flat_preds, references=flat_labels, average="micro"
     )
     return {"accuracy": acc, "f1": f1, "f1_HF": f1_hf}
-
-
-results = evaluate(test_ds)
-print(f"Results obtained: {results}")
-
-print("\n\n")
-predictions = trainer.predict(train_ds)
-preds = predictions.predictions.argmax(-1)
-
-print(preds[0], preds[1])
