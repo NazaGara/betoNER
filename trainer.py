@@ -64,8 +64,8 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-IGNORE_INDEX = torch.nn.CrossEntropyLoss().ignore_index
-INWORD_PAD_LABEL = "PAD"
+IGNORE_INDEX = nn.CrossEntropyLoss().ignore_index
+
 LABEL_LIST = [
     "O",
     "B-PER",
@@ -76,23 +76,10 @@ LABEL_LIST = [
     "I-LOC",
     "B-MISC",
     "I-MISC",
+    "PAD",
 ]
 
-# LABEL_MAP = {
-#    "O": 0,
-#    "B-PER": 1,
-#    "I-PER": 2,
-#    "B-ORG": 3,
-#    "I-ORG": 4,
-#    "B-LOC": 5,
-#    "I-LOC": 6,
-#    "B-MISC": 7,
-#    "I-MISC": 8,
-# }
-
-
 LABEL_MAP = {label: i for i, label in enumerate(LABEL_LIST)}
-LABEL_MAP[INWORD_PAD_LABEL] = IGNORE_INDEX
 
 OUTPUT_DIR = f"results/{args.output}"
 MAX_LEN = args.max_len
@@ -129,6 +116,7 @@ def tokenize_and_align_labels(examples):
         examples["tokens"],
         is_split_into_words=True,
         truncation=True,
+        return_token_type_ids=False,
         # max_length=MAX_LEN,
         # padding="max_length",
     )
@@ -160,6 +148,22 @@ def flat_list(t: list):
     return [item for sublist in t for item in sublist]
 
 
+def correct_pad(labels, preds):
+    # detect pad
+    unpad_labels, unpad_preds = [], []
+    for idx, label in enumerate(labels):
+        a, i = label[1], 1
+        while a != -100 and i < (len(label) - 1):
+            i += 1
+            a = label[i]
+        unpad_labels.append(label[1:i])
+        unpad_preds.append(preds[idx][1:i])
+
+    assert len(unpad_labels) == len(unpad_preds)
+
+    return flat_list(unpad_labels), flat_list(unpad_preds)
+
+
 def compute_metrics(pred: EvalPrediction):
     """
     Funcion que ejecuta el Trainer al evaluar, retorna un diccionario con la
@@ -167,12 +171,15 @@ def compute_metrics(pred: EvalPrediction):
     mas desiguladad en las labels.
     """
     metric = load_metric("f1")
+    # aca podria ignorar los que tengan el -100
     logits, labels = pred
     predictions = np.argmax(logits, axis=-1)
-    flat_labels, flat_preds = flat_list(labels), flat_list(predictions)
-    return metric.compute(
-        predictions=flat_preds, references=flat_labels, average="micro"
-    )
+    labels, predictions = correct_pad(labels, predictions)
+
+    return metric.compute(predictions=predictions, references=labels, average="micro")
+
+
+from sklearn.metrics import accuracy_score, f1_score
 
 
 def evaluate(ds: Dataset):
@@ -182,16 +189,26 @@ def evaluate(ds: Dataset):
     """
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
-    labels = predictions.label_ids  # np.array(ds["labels"], dtype=object)
-    flat_preds = flat_list(preds)
-    flat_labels = flat_list(labels)
+    # labels = predictions.label_ids
+    y_pred, y_true = [], []
+    labels = np.array(ds["labels"], dtype=object)
+    for i in range(len(preds)):
+        k = len(labels[i])
+        # Saco el primero y el ultimo que son el [CLS] y [SEP]
+        y_pred.append(preds[i][1 : k - 1])
+        y_true.append(labels[i][1 : k - 1])
 
+    flat_preds = flat_list(y_pred)
+    flat_labels = flat_list(y_true)
     assert len(flat_preds) == len(flat_labels)
-    metric = load_metric("f1")
-    f1_hf = metric.compute(
-        predictions=flat_preds, references=flat_labels, average="micro"
-    )
-    return {"accuracy": acc, "f1": f1, "f1_HF": f1_hf}
+
+    f1_macro = f1_score(flat_labels, flat_preds, average="macro")
+    acc = accuracy_score(flat_labels, flat_preds)
+    return {
+        "accuracy": acc,
+        # "f1_micro": f1_micro,
+        "f1_macro": f1_macro,
+    }
 
 
 def dump_log(filename, trainer):
@@ -256,6 +273,10 @@ def main():
     trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
+
+    print(evaluate(train_ds))
+    print(evaluate(test_ds))
+    print(evaluate(valid_ds))
 
 
 if __name__ == "__main__":
