@@ -100,13 +100,17 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"device: {device}")
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
-tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
+tokenizer = AutoTokenizer.from_pretrained(
+    checkpoint, num_labels=len(LABEL_LIST)
+)
 model = AutoModelForTokenClassification.from_pretrained(
     checkpoint, num_labels=len(LABEL_LIST)
 )
 
+from transformers.tokenization_utils_base import BatchEncoding
 
-def tokenize_and_align_labels(examples):
+
+def tokenize_and_align_labels(examples) -> BatchEncoding:
     """
     Funcion para tokenizar las sentencias, ademas de alinear palabras con los
     labels. Usada junto al map de los Dataset, retorna otro Dataset, que
@@ -122,7 +126,7 @@ def tokenize_and_align_labels(examples):
     )
 
     labels = []
-    for i, label in enumerate(examples[f"ner_tags"]):
+    for i, label in enumerate(examples["ner_tags"]):
         word_ids = tokenized_inputs.word_ids(
             batch_index=i
         )  # Map tokens to their respective word.
@@ -145,18 +149,23 @@ def tokenize_and_align_labels(examples):
     return tokenized_inputs
 
 
-def flat_list(t: list):
+def flat_list(t: list) -> list:
     return [item for sublist in t for item in sublist]
 
 
 def correct_pad(labels, preds):
+    """
+    Function that removes the pad elements present in the labels and in the
+    predictions. Retorns a tuple with the flatten unpadded lists, ready to be
+    used in the metric function.
+    """
     # detect pad
     unpad_labels, unpad_preds = [], []
     for idx, label in enumerate(labels):
-        a, i = label[1], 1
-        while a != -100 and i < (len(label) - 1):
+        elem, i = label[1], 1
+        while elem != -100 and i < (len(label) - 1):
             i += 1
-            a = label[i]
+            elem = label[i]
         unpad_labels.append(label[1:i])
         unpad_preds.append(preds[idx][1:i])
 
@@ -165,7 +174,7 @@ def correct_pad(labels, preds):
     return flat_list(unpad_labels), flat_list(unpad_preds)
 
 
-def compute_metrics(pred: EvalPrediction):
+def compute_metrics(pred: EvalPrediction) -> dict:
     """
     Funcion que ejecuta el Trainer al evaluar, retorna un diccionario con la
     precision y el f1-score. La 2da metrica es mejor cuando los datos tienen
@@ -177,7 +186,9 @@ def compute_metrics(pred: EvalPrediction):
     predictions = np.argmax(logits, axis=-1)
     labels, predictions = correct_pad(labels, predictions)
 
-    return metric.compute(predictions=predictions, references=labels, average="micro")
+    return metric.compute(
+        predictions=predictions, references=labels, average="micro"
+    )
 
 
 from sklearn.metrics import accuracy_score, f1_score
@@ -190,17 +201,8 @@ def evaluate(trainer: Trainer, ds: Dataset):
     """
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
-    # labels = predictions.label_ids
-    y_pred, y_true = [], []
-    labels = np.array(ds["labels"], dtype=object)
-    for i in range(len(preds)):
-        k = len(labels[i])
-        # Saco el primero y el ultimo que son el [CLS] y [SEP]
-        y_pred.append(preds[i][1 : k - 1])
-        y_true.append(labels[i][1 : k - 1])
-
-    flat_preds = flat_list(y_pred)
-    flat_labels = flat_list(y_true)
+    labels = predictions.label_ids
+    flat_preds, flat_labels = correct_pad(labels, preds)
     assert len(flat_preds) == len(flat_labels)
 
     f1_macro = f1_score(flat_labels, flat_preds, average="macro")
@@ -213,6 +215,9 @@ def evaluate(trainer: Trainer, ds: Dataset):
 
 
 def dump_log(filename, trainer):
+    """
+    Save the log from the training into a filename on the OUTPUT DIR directory
+    """
     with open(f"{filename}", "+a") as f:
         for obj in trainer.state.log_history:
             json.dump(obj, f, indent=2)
@@ -225,9 +230,15 @@ def main():
         split=[f"train[:{PERC}%]", f"test[:{PERC}%]", f"validation[:{PERC}%]"],
     )
 
-    train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
-    test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
-    valid_ds = valid_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    train_ds = train_ds.filter(
+        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
+    )
+    test_ds = test_ds.filter(
+        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
+    )
+    valid_ds = valid_ds.filter(
+        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
+    )
 
     train_ds = train_ds.map(
         tokenize_and_align_labels,
@@ -275,9 +286,9 @@ def main():
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    print(evaluate(trainer, train_ds))
-    print(evaluate(trainer, test_ds))
-    print(evaluate(trainer, valid_ds))
+    print(f"Evaluation on train data:\n{evaluate(trainer, train_ds)}")
+    print(f"Evaluation on test data:\n{evaluate(trainer, test_ds)}")
+    print(f"Evaluation on validation data:\n{evaluate(trainer, valid_ds)}")
 
 
 if __name__ == "__main__":
