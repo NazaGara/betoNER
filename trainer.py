@@ -64,7 +64,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-IGNORE_INDEX = nn.CrossEntropyLoss().ignore_index
+IGNORE_INDEX = torch.nn.CrossEntropyLoss().ignore_index
 
 LABEL_LIST = [
     "O",
@@ -136,7 +136,8 @@ def tokenize_and_align_labels(examples):
             ):  # Only label the first token of a given word.
                 label_ids.append(label[word_idx])
             else:
-                label_ids.append(IGNORE_INDEX)
+                ##label_ids.append(IGNORE_INDEX)
+                label_ids.append(label[word_idx])
             previous_word_idx = word_idx
         labels.append(label_ids)
 
@@ -182,7 +183,7 @@ def compute_metrics(pred: EvalPrediction):
 from sklearn.metrics import accuracy_score, f1_score
 
 
-def evaluate(ds: Dataset):
+def evaluate(trainer: Trainer, ds: Dataset):
     """
     Para poder evaluar en base a un Dataset con el mismo formato que fue
     entrenado este modelo
@@ -262,7 +263,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_ds,
-        eval_dataset=test_ds,
+        eval_dataset=train_ds if PERC != 100 else test_ds,
         data_collator=data_collator,
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
@@ -274,9 +275,9 @@ def main():
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    print(evaluate(train_ds))
-    print(evaluate(test_ds))
-    print(evaluate(valid_ds))
+    print(evaluate(trainer, train_ds))
+    print(evaluate(trainer, test_ds))
+    print(evaluate(trainer, valid_ds))
 
 
 if __name__ == "__main__":
