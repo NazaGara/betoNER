@@ -282,7 +282,7 @@ def main():
 
     trainer.train()
 
-    trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
+    #trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
