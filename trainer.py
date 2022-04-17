@@ -88,21 +88,11 @@ EPOCHS = args.epochs
 LEARNING_RATE = args.lr
 BATCH_SIZE = args.batch_size
 
-
-# TODO
-# -> intentar overfittear para un cjto del train
-# -> seguir insistiendo con el padding para que se haga dinamico ✓
-# -> probar diferentes batch sizes, tambien por parametros ✓
-# -> Parametros para guardar el modelo final ✓
-
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"device: {device}")
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
-tokenizer = AutoTokenizer.from_pretrained(
-    checkpoint, num_labels=len(LABEL_LIST)
-)
+tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
 model = AutoModelForTokenClassification.from_pretrained(
     checkpoint, num_labels=len(LABEL_LIST)
 )
@@ -186,9 +176,7 @@ def compute_metrics(pred: EvalPrediction) -> dict:
     predictions = np.argmax(logits, axis=-1)
     labels, predictions = correct_pad(labels, predictions)
 
-    return metric.compute(
-        predictions=predictions, references=labels, average="micro"
-    )
+    return metric.compute(predictions=predictions, references=labels, average="micro")
 
 
 from sklearn.metrics import accuracy_score, f1_score
@@ -230,15 +218,9 @@ def main():
         split=[f"train[:{PERC}%]", f"test[:{PERC}%]", f"validation[:{PERC}%]"],
     )
 
-    train_ds = train_ds.filter(
-        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
-    )
-    test_ds = test_ds.filter(
-        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
-    )
-    valid_ds = valid_ds.filter(
-        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
-    )
+    train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    valid_ds = valid_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
 
     train_ds = train_ds.map(
         tokenize_and_align_labels,
@@ -282,7 +264,7 @@ def main():
 
     trainer.train()
 
-    #trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
+    # trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
