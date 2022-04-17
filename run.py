@@ -34,7 +34,7 @@ for l in LENGTHS:
             for lr in LR:
                 output = subprocess.check_output(
                     f"python3 trainer.py {name}-{bs}-{e}-{lr}-{l} \
-                                                --train_batch_size {bs} \
+                                                --batch_size {bs} \
                                                 --epochs {e} \
                                                 --max_len {l} \
                                                 --lr {lr} \
@@ -42,5 +42,5 @@ for l in LENGTHS:
                                                 ",
                     shell=True,
                 )
-                with open(f"results/{name}-{bs}-{e}-{lr}-{l}", "+a") as f:
-                    f.write(output.decode())
+                #with open(f"results/{name}-{bs}-{e}-{lr}-{l}", "+a") as f:
+                #    f.write(output.decode())

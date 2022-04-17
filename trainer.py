@@ -1,5 +1,6 @@
 # trainer.py
 import torch
+import mlflow
 import pandas as pd
 import numpy as np
 import argparse
@@ -182,7 +183,7 @@ def compute_metrics(pred: EvalPrediction) -> dict:
 from sklearn.metrics import accuracy_score, f1_score
 
 
-def evaluate(trainer: Trainer, ds: Dataset):
+def evaluate(trainer: Trainer, ds: Dataset) -> dict:
     """
     Para poder evaluar en base a un Dataset con el mismo formato que fue
     entrenado este modelo
@@ -212,6 +213,13 @@ def dump_log(filename, trainer):
 
 
 def main():
+
+    mlflow.set_experiment(f'{OUTPUT_DIR}')
+    with mlflow.start_run():
+        mlflow.log_param('a',1)
+        mlflow.log_metric('b', 2)
+
+
     train_ds, test_ds, valid_ds = load_dataset(
         "conll2002",
         "es",
@@ -266,11 +274,13 @@ def main():
 
     # trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
+
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    print(f"Evaluation on train data:\n{evaluate(trainer, train_ds)}")
-    print(f"Evaluation on test data:\n{evaluate(trainer, test_ds)}")
-    print(f"Evaluation on validation data:\n{evaluate(trainer, valid_ds)}")
+    with open(f"{OUTPUT_DIR}/results.txt", '+a') as f:
+        f.write(f"Evaluation on train data:\n{evaluate(trainer, train_ds)}")
+        f.write(f"Evaluation on test data:\n{evaluate(trainer, test_ds)}")
+        f.write(f"Evaluation on validation data:\n{evaluate(trainer, valid_ds)}")
 
 
 if __name__ == "__main__":
