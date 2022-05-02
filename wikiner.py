@@ -18,11 +18,18 @@ import logging
 import datasets
 
 
-_CITATION = """/something"""
+_CITATION = """\
+@inproceedings{,
+    title = "",
+    author = "Garagiola, Nazareno",
+    year = "2022",
+    url = ""
+}
+"""
 
 _DESCRIPTION = """Dataset used to train a NER model"""
 
-_URL = "https://github.com/NazaGara/betoNER/tree/main/data/wikiner/"
+_URL = "https://raw.githubusercontent.com/NazaGara/betoNER/main/data/wikiner/"
 _TRAINING_FILE = "train.conllu"
 
 
@@ -93,7 +100,7 @@ class Wikiner(datasets.GeneratorBasedBuilder):
 
     def _generate_examples(self, filepath):
         logging.info("⏳ Generating examples from = %s", filepath)
-        with open(filepath, encoding="utf-8") as f:  # CHECK ENCODING
+        with open(filepath, encoding="utf-8") as f:
             guid = 0
             tokens = []
             ner_tags = []
@@ -109,9 +116,9 @@ class Wikiner(datasets.GeneratorBasedBuilder):
                         tokens = []
                         ner_tags = []
                 else:
-                    splits = line.split(" ")  # line.split("\t")
-                    tokens.append(splits[1])
-                    ner_tags.append(splits[2].replace("\n", ""))
+                    splits = line.split(" ")
+                    tokens.append(splits[0])
+                    ner_tags.append(splits[1].rstrip())
             # last example
             if tokens:
                 yield guid, {
