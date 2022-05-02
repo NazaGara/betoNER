@@ -22,11 +22,11 @@ _CITATION = """/something"""
 
 _DESCRIPTION = """Dataset used to train a NER model"""
 
-_URL = "https://github.com/NazaGara/betoNER/tree/main/data/wikiner"
+_URL = "https://github.com/NazaGara/betoNER/tree/main/data/wikiner/"
 _TRAINING_FILE = "train.conllu"
 
 
-class ConllppConfig(datasets.BuilderConfig):
+class WikinerConfig(datasets.BuilderConfig):
     """BuilderConfig"""
 
     def __init__(self, **kwargs):
@@ -34,14 +34,14 @@ class ConllppConfig(datasets.BuilderConfig):
         Args:
           **kwargs: keyword arguments forwarded to super.
         """
-        super(ConllppConfig, self).__init__(**kwargs)
+        super(WikinerConfig, self).__init__(**kwargs)
 
 
-class Conllpp(datasets.GeneratorBasedBuilder):
-    """Conllpp dataset."""
+class Wikiner(datasets.GeneratorBasedBuilder):
+    """Wikiner dataset."""
 
     BUILDER_CONFIGS = [
-        ConllppConfig(
+        WikinerConfig(
             name="wikiner",
             version=datasets.Version("1.0.0"),
             description="wikiner dataset",
@@ -93,7 +93,7 @@ class Conllpp(datasets.GeneratorBasedBuilder):
 
     def _generate_examples(self, filepath):
         logging.info("⏳ Generating examples from = %s", filepath)
-        with open(path, encoding="utf-8") as f:  # CHECK ENCODING
+        with open(filepath, encoding="utf-8") as f:  # CHECK ENCODING
             guid = 0
             tokens = []
             ner_tags = []
@@ -109,7 +109,7 @@ class Conllpp(datasets.GeneratorBasedBuilder):
                         tokens = []
                         ner_tags = []
                 else:
-                    splits = line.split("\t")
+                    splits = line.split(" ")  # line.split("\t")
                     tokens.append(splits[1])
                     ner_tags.append(splits[2].replace("\n", ""))
             # last example
