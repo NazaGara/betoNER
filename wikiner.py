@@ -93,7 +93,7 @@ class Conllpp(datasets.GeneratorBasedBuilder):
 
     def _generate_examples(self, filepath):
         logging.info("⏳ Generating examples from = %s", filepath)
-        with open(filepath, encoding="utf-8") as f:  # CHECK ENCODING
+        with open(path, encoding="utf-8") as f:  # CHECK ENCODING
             guid = 0
             tokens = []
             ner_tags = []
@@ -109,12 +109,9 @@ class Conllpp(datasets.GeneratorBasedBuilder):
                         tokens = []
                         ner_tags = []
                 else:
-                    # conll_like tokens are space separated
-                    splits = line.split(" ")
-                    tokens.append(splits[0])
-                    ner_tags.append(
-                        splits[1].rstrip()
-                    )  # ner_tags.append(splits[3].rstrip())
+                    splits = line.split("\t")
+                    tokens.append(splits[1])
+                    ner_tags.append(splits[2].replace("\n", ""))
             # last example
             if tokens:
                 yield guid, {
