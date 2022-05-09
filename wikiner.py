@@ -62,6 +62,80 @@ class Wikiner(datasets.GeneratorBasedBuilder):
                 {
                     "id": datasets.Value("string"),
                     "tokens": datasets.Sequence(datasets.Value("string")),
+                    "pos_tags": datasets.Sequence(
+                        datasets.features.ClassLabel(
+                            names=[
+                                "ACRNM",
+                                "ADJ",
+                                "ADV",
+                                "ALFS",
+                                "ART",
+                                "BACKSLASH",
+                                "CARD",
+                                "CC",
+                                "CCAD",
+                                "CCNEG",
+                                "CM",
+                                "CODE",
+                                "COLON",
+                                "CQUE",
+                                "CSUBF",
+                                "CSUBI",
+                                "CSUBX",
+                                "DM",
+                                "DOTS",
+                                "FS",
+                                "INT",
+                                "LP",
+                                "NC",
+                                "NEG",
+                                "NMEA",
+                                "NMON",
+                                "NP",
+                                "ORD",
+                                "PAL",
+                                "PDEL",
+                                "PE",
+                                "PERCT",
+                                "PPC",
+                                "PPO",
+                                "PPX",
+                                "PREP",
+                                "QT",
+                                "QU",
+                                "REL",
+                                "RP",
+                                "SE",
+                                "SEMICOLON",
+                                "SLASH",
+                                "SYM",
+                                "UMMX",
+                                "VCLIfin",
+                                "VCLIger",
+                                "VCLIinf",
+                                "VEadj",
+                                "VEfin",
+                                "VEger",
+                                "VEinf",
+                                "VHadj",
+                                "VHfin",
+                                "VHger",
+                                "VHinf",
+                                "VLadj",
+                                "VLfin",
+                                "VLger",
+                                "VLinf",
+                                "VMadj",
+                                "VMfin",
+                                "VMger",
+                                "VMinf",
+                                "VSadj",
+                                "VSfin",
+                                "VSger",
+                                "VSinf",
+                            ]
+                        )
+                    ),
                     "ner_tags": datasets.Sequence(
                         datasets.features.ClassLabel(
                             names=[
@@ -102,27 +176,30 @@ class Wikiner(datasets.GeneratorBasedBuilder):
         logging.info("⏳ Generating examples from = %s", filepath)
         with open(filepath, encoding="utf-8") as f:
             guid = 0
-            tokens = []
-            ner_tags = []
+            tokens, pos_tags, ner_tags = [], [], []
             for line in f:
                 if line.startswith("-DOCSTART-") or line == "" or line == "\n":
                     if tokens:
                         yield guid, {
                             "id": str(guid),
                             "tokens": tokens,
+                            "pos_tags": pos_tags,
                             "ner_tags": ner_tags,
                         }
                         guid += 1
                         tokens = []
+                        pos_tags = []
                         ner_tags = []
                 else:
                     splits = line.split(" ")
                     tokens.append(splits[0])
-                    ner_tags.append(splits[1].rstrip())
+                    pos_tags.append(splits[1])
+                    ner_tags.append(splits[2].rstrip())
             # last example
             if tokens:
                 yield guid, {
                     "id": str(guid),
                     "tokens": tokens,
+                    "pos_tags": pos_tags,
                     "ner_tags": ner_tags,
                 }
