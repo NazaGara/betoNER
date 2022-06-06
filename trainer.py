@@ -272,15 +272,15 @@ def main():
 
     trainer.train()
 
-    # trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
+    trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
     with open(f"{OUTPUT_DIR}/results.txt", '+a') as f:
-        f.write(f"Evaluation on train data:\n{evaluate(trainer, train_ds)}")
-        f.write(f"Evaluation on test data:\n{evaluate(trainer, test_ds)}")
-        f.write(f"Evaluation on validation data:\n{evaluate(trainer, valid_ds)}")
+        f.write(f"Evaluation on train data:\n{evaluate(trainer, train_ds)}\n")
+        f.write(f"Evaluation on test data:\n{evaluate(trainer, test_ds)}\n")
+        f.write(f"Evaluation on validation data:\n{evaluate(trainer, valid_ds)}\n")
 
 
 if __name__ == "__main__":
