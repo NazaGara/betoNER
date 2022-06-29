@@ -87,9 +87,14 @@ print(f"device: {device}")
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
+#model = AutoModelForTokenClassification.from_pretrained(
+#    checkpoint, num_labels=len(LABEL_LIST)
+#)
+
 model = AutoModelForTokenClassification.from_pretrained(
-    checkpoint, num_labels=len(LABEL_LIST)
+    'results/conll/trained_model/', num_labels=len(LABEL_LIST)
 )
+
 
 from transformers.tokenization_utils_base import BatchEncoding
 

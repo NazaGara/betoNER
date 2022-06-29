@@ -20,27 +20,21 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-name = args.name
+name = 'conll_wikiner' #args.name
 PERC = args.percentage
-BATCH_SIZES = [16]
-EPOCHS = [3, 4, 5]
-LENGTHS = [128, 256]
-LR = [1e-5, 2e-5, 3e-5]
+BATCH_SIZES = [8,16]
+EPOCHS = [2,3]
+LENGTHS = [1]
+LR = [2e-5, 3e-5]
 
-
-for l in LENGTHS:
-    for bs in BATCH_SIZES:
-        for e in EPOCHS:
-            for lr in LR:
-                output = subprocess.check_output(
-                    f"python3 trainer.py {name}-{bs}-{e}-{lr}-{l} \
-                                                --batch_size {bs} \
-                                                --epochs {e} \
-                                                --max_len {l} \
-                                                --lr {lr} \
-                                                --percentage {PERC} \
-                                                ",
-                    shell=True,
-                )
-                #with open(f"results/{name}-{bs}-{e}-{lr}-{l}", "+a") as f:
-                #    f.write(output.decode())
+for bs in BATCH_SIZES:
+    for e in EPOCHS:
+        for lr in LR:
+            output = subprocess.check_output(
+                f"python3 wikiner_trainer.py {name}-{bs}-{e}-{lr} \
+                                            --batch_size {bs} \
+                                            --epochs {e} \
+                                            --lr {lr} \
+                                            ",
+                shell=True,
+            )
