@@ -87,12 +87,12 @@ print(f"device: {DEVICE}")
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
-#model = AutoModelForTokenClassification.from_pretrained(
+# model = AutoModelForTokenClassification.from_pretrained(
 #    checkpoint, num_labels=len(LABEL_LIST)
-#)
+# )
 
 model = AutoModelForTokenClassification.from_pretrained(
-    'results/conll/trained_model/', num_labels=len(LABEL_LIST)
+    "results/conll/trained_model/", num_labels=len(LABEL_LIST)
 )
 
 
@@ -210,24 +210,36 @@ def dump_log(filename, trainer):
             json.dump(obj, f, indent=2)
 
 
+def output_phrase(phrase: str, trainer: Trainer = trainer) -> str:
+    tokenized_input = tokenizer([phrase], return_token_type_ids=False)
+    ds = Dataset.from_dict(tokenized_input)
+    pred = trainer.predict(ds)
+    labels = pred.predictions.argmax(-1)[0]
+    res = ""
+    for i, s in enumerate(tokenized_input["input_ids"][0]):
+        # res += (s, tokenizer.decode(s), labels[i], TOKEN_MAP[labels[i]])
+        res += f"{tokenizer.decode(s)} {TOKEN_MAP[labels[i]]}\n"
+    return res
+
+
 def main():
 
-    mlflow.set_experiment(f'{OUTPUT_DIR}')
+    mlflow.set_experiment(f"{OUTPUT_DIR}")
     with mlflow.start_run():
-        mlflow.log_param('a',1)
-        mlflow.log_metric('b', 2)
+        mlflow.log_param("a", 1)
+        mlflow.log_metric("b", 2)
 
     train_ds = load_dataset(
         "NazaGara/wikiner",
-        split='train',
+        split="train",
         use_auth_token=True,
     )
 
-    #test_ds, valid_ds =  load_dataset(
+    # test_ds, valid_ds =  load_dataset(
     #    "NazaGara/wikiner",
     #    split=["train[:15%]","train[:10%]"],
     #    use_auth_token=True,
-    #)
+    # )
 
     test_ds, valid_ds = load_dataset(
         "conll2002",
@@ -259,7 +271,7 @@ def main():
 
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
-        save_strategy="no", #esto para no hacer checkpointing
+        save_strategy="no",  # esto para no hacer checkpointing
         logging_steps=50,
         evaluation_strategy="epoch",
         per_device_train_batch_size=BATCH_SIZE,
@@ -284,10 +296,9 @@ def main():
 
     trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
-
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    with open(f"{OUTPUT_DIR}/results.txt", 'w+') as f:
+    with open(f"{OUTPUT_DIR}/results.txt", "w+") as f:
         f.write(f"Evaluation on train data:\n{evaluate(trainer, train_ds)}\n")
         f.write(f"Evaluation on test data:\n{evaluate(trainer, test_ds)}\n")
         f.write(f"Evaluation on validation data:\n{evaluate(trainer, valid_ds)}\n")
