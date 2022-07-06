@@ -22,7 +22,7 @@ args = parser.parse_args()
 
 name = 'conll_wikiner' #args.name
 PERC = args.percentage
-BATCH_SIZES = [8,16]
+BATCH_SIZES = [16]
 EPOCHS = [2,3]
 LENGTHS = [1]
 LR = [2e-5, 3e-5]

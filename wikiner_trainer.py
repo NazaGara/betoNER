@@ -82,8 +82,8 @@ EPOCHS = args.epochs
 LEARNING_RATE = args.lr
 BATCH_SIZE = args.batch_size
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"device: {device}")
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"device: {DEVICE}")
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
@@ -205,7 +205,7 @@ def dump_log(filename, trainer):
     """
     Save the log from the training into a filename on the OUTPUT DIR directory
     """
-    with open(f"{filename}", "+a") as f:
+    with open(f"{filename}", "w+") as f:
         for obj in trainer.state.log_history:
             json.dump(obj, f, indent=2)
 
@@ -220,12 +220,19 @@ def main():
     train_ds = load_dataset(
         "NazaGara/wikiner",
         split='train',
-        use_auth_token=True)
+        use_auth_token=True,
+    )
+
+    #test_ds, valid_ds =  load_dataset(
+    #    "NazaGara/wikiner",
+    #    split=["train[:15%]","train[:10%]"],
+    #    use_auth_token=True,
+    #)
 
     test_ds, valid_ds = load_dataset(
         "conll2002",
         "es",
-        split=[f"test[:{PERC}%]", f"validation[:{PERC}%]"],
+        split=["test", "validation"],
     )
 
     train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
@@ -280,7 +287,7 @@ def main():
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    with open(f"{OUTPUT_DIR}/results.txt", '+a') as f:
+    with open(f"{OUTPUT_DIR}/results.txt", 'w+') as f:
         f.write(f"Evaluation on train data:\n{evaluate(trainer, train_ds)}\n")
         f.write(f"Evaluation on test data:\n{evaluate(trainer, test_ds)}\n")
         f.write(f"Evaluation on validation data:\n{evaluate(trainer, valid_ds)}\n")

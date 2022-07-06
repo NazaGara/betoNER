@@ -207,7 +207,7 @@ def dump_log(filename, trainer):
     """
     Save the log from the training into a filename on the OUTPUT DIR directory
     """
-    with open(f"{filename}", "+a") as f:
+    with open(f"{filename}", "w+") as f:
         for obj in trainer.state.log_history:
             json.dump(obj, f, indent=2)
 
@@ -277,7 +277,7 @@ def main():
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    with open(f"{OUTPUT_DIR}/results.txt", '+a') as f:
+    with open(f"{OUTPUT_DIR}/results.txt", 'w+') as f:
         f.write(f"Evaluation on train data:\n{evaluate(trainer, train_ds)}\n")
         f.write(f"Evaluation on test data:\n{evaluate(trainer, test_ds)}\n")
         f.write(f"Evaluation on validation data:\n{evaluate(trainer, valid_ds)}\n")
