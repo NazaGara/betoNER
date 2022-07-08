@@ -213,7 +213,7 @@ def dump_log(filename, trainer):
             json.dump(obj, f, indent=2)
 
 
-def output_phrase(phrase: str, trainer: Trainer = trainer) -> str:
+def output_phrase(phrase: str, trainer: Trainer) -> str:
     tokenized_input = tokenizer([phrase], return_token_type_ids=False)
     ds = Dataset.from_dict(tokenized_input)
     pred = trainer.predict(ds)
