@@ -12,8 +12,7 @@ from transformers import (
     DataCollatorForTokenClassification,
 )
 
-from datasets import load_dataset, load_metric, Dataset
-from transformers.trainer_utils import EvalPrediction
+from datasets import load_dataset, Dataset
 import json
 
 from utils import *
@@ -40,7 +39,7 @@ parser.add_argument(
     type=int,
     metavar="PERCENTAGE",
     help="Percentage of training dataset",
-    default=10,
+    default=100,
 )
 parser.add_argument(
     "--epochs",
@@ -173,6 +172,7 @@ def main():
 
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
+        save_strategy="no",  # esto para no hacer checkpointing
         logging_steps=50,
         evaluation_strategy="epoch",
         per_device_train_batch_size=BATCH_SIZE,
@@ -187,7 +187,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_ds,
-        eval_dataset=train_ds if PERC != 100 else test_ds,
+        eval_dataset=valid_ds,
         data_collator=data_collator,
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,

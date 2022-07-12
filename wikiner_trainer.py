@@ -12,8 +12,7 @@ from transformers import (
     DataCollatorForTokenClassification,
 )
 
-from datasets import load_dataset, load_metric, Dataset
-from transformers.trainer_utils import EvalPrediction
+from datasets import load_dataset, Dataset
 import json
 
 from utils import *
@@ -71,12 +70,8 @@ print(f"device: {DEVICE}")
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
-# model = AutoModelForTokenClassification.from_pretrained(
-#    checkpoint, num_labels=len(LABEL_LIST)
-# )
-
 model = AutoModelForTokenClassification.from_pretrained(
-    "results/conll/trained_model/", num_labels=len(LABEL_LIST)
+    checkpoint, num_labels=len(LABEL_LIST)
 )
 
 
@@ -198,7 +193,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_ds,
-        eval_dataset=test_ds,
+        eval_dataset=valid_ds,
         data_collator=data_collator,
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
