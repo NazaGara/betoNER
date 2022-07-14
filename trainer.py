@@ -95,8 +95,6 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
         is_split_into_words=True,
         truncation=True,
         return_token_type_ids=False,
-        # max_length=MAX_LEN,
-        # padding="max_length",
     )
 
     labels = []
@@ -195,14 +193,13 @@ def main():
 
     trainer.train()
 
-    trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
+    # trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    with open(f"{OUTPUT_DIR}/results.txt", "w+") as f:
-        f.write(f"Evaluation on train data:\n{evaluate(trainer, train_ds)}\n")
-        f.write(f"Evaluation on test data:\n{evaluate(trainer, test_ds)}\n")
-        f.write(f"Evaluation on validation data:\n{evaluate(trainer, valid_ds)}\n")
+    evaluate_and_save(f"{OUTPUT_DIR}/train.csv", trainer, train_ds)
+    evaluate_and_save(f"{OUTPUT_DIR}/valid.csv", trainer, valid_ds)
+    evaluate_and_save(f"{OUTPUT_DIR}/test.csv", trainer, test_ds)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ LABEL_LIST = [
     "I-LOC",
     "B-MISC",
     "I-MISC",
-    "PAD",
+    #    "PAD",
 ]
 
 LABEL_MAP = {label: i for i, label in enumerate(LABEL_LIST)}
@@ -67,7 +67,7 @@ def compute_metrics(pred: EvalPrediction) -> dict:
     return metric.compute(predictions=predictions, references=labels, average="micro")
 
 
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 
 
 def evaluate(trainer: Trainer, ds: Dataset) -> dict:
@@ -81,12 +81,33 @@ def evaluate(trainer: Trainer, ds: Dataset) -> dict:
     flat_preds, flat_labels = correct_pad(labels, preds)
     assert len(flat_preds) == len(flat_labels)
 
-    f1_macro = f1_score(flat_labels, flat_preds, average="macro")
-    acc = accuracy_score(flat_labels, flat_preds)
-    return {
-        "accuracy": acc,
-        "f1_macro": f1_macro,
-    }
+    # f1_macro = f1_score(flat_labels, flat_preds, average="macro")
+    # acc = accuracy_score(flat_labels, flat_preds)
+    return classification_report(
+        flat_labels,
+        flat_preds,
+        target_names=LABEL_LIST,
+        output_dict=True,
+    )
+
+
+def evaluate_and_save(filename, trainer: Trainer, ds: Dataset):
+    predictions = trainer.predict(ds)
+    preds = predictions.predictions.argmax(-1)
+    labels = predictions.label_ids
+    flat_preds, flat_labels = correct_pad(labels, preds)
+    assert len(flat_preds) == len(flat_labels)
+
+    report = classification_report(
+        flat_labels,
+        flat_preds,
+        target_names=LABEL_LIST,
+        output_dict=True,
+    )
+
+    df = pd.DataFrame(report).transpose()
+    df.to_csv(filename)
+    return report
 
 
 def dump_log(filename, trainer: Trainer):
