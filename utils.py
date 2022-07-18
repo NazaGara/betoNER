@@ -67,7 +67,13 @@ def compute_metrics(pred: EvalPrediction) -> dict:
     return metric.compute(predictions=predictions, references=labels, average="micro")
 
 
-from sklearn.metrics import accuracy_score, f1_score, classification_report
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    classification_report,
+    ConfusionMatrixDisplay,
+)
+import matplotlib.pyplot as plt
 
 
 def evaluate(trainer: Trainer, ds: Dataset) -> dict:
@@ -104,6 +110,13 @@ def evaluate_and_save(filename, trainer: Trainer, ds: Dataset):
         target_names=LABEL_LIST,
         output_dict=True,
     )
+
+    y_true = [*map(TOKEN_MAP.get, flat_labels)]
+    y_pred = [*map(TOKEN_MAP.get, flat_preds)]
+    fig, ax = plt.subplots(figsize=(15, 15))
+    ConfusionMatrixDisplay.from_predictions(y_true, y_pred, ax=ax, cmap="gist_ncar_r")
+
+    plt.savefig(f"{filename}_heatmap.png")
 
     df = pd.DataFrame(report).transpose()
     df.to_csv(filename)
