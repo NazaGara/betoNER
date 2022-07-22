@@ -1,5 +1,4 @@
 # trainer.py
-from cgi import test
 import torch
 import mlflow
 import pandas as pd

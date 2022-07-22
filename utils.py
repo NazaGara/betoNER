@@ -84,8 +84,9 @@ def evaluate(trainer: Trainer, ds: Dataset) -> dict:
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
     labels = predictions.label_ids
-    flat_preds, flat_labels = correct_pad(labels, preds)
-    assert len(flat_preds) == len(flat_labels)
+    # flat_preds, flat_labels = correct_pad(labels, preds)
+    flat_labels, flat_preds = correct_pad(labels, preds)
+    # assert len(flat_preds) == len(flat_labels)
 
     # f1_macro = f1_score(flat_labels, flat_preds, average="macro")
     # acc = accuracy_score(flat_labels, flat_preds)
@@ -101,8 +102,10 @@ def evaluate_and_save(filename, trainer: Trainer, ds: Dataset):
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
     labels = predictions.label_ids
-    flat_preds, flat_labels = correct_pad(labels, preds)
-    assert len(flat_preds) == len(flat_labels)
+
+    # flat_preds, flat_labels = correct_pad(labels, preds)
+    flat_labels, flat_preds = correct_pad(labels, preds)
+    # assert len(flat_preds) == len(flat_labels)
 
     report = classification_report(
         flat_labels,
