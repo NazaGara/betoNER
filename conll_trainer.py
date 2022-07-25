@@ -1,6 +1,8 @@
 # trainer.py
 import torch
 import mlflow
+import pandas as pd
+import numpy as np
 import argparse
 from transformers import (
     AutoModelForTokenClassification,
@@ -11,11 +13,9 @@ from transformers import (
 )
 
 from datasets import load_dataset, Dataset
+import json
 
 from utils import *
-
-TRAIN_DS = ["CONLL", "WIKINER", "WIKINEURAL"]
-VALID_DS = ["CONLL", "WIKINEURAL"]
 
 parser = argparse.ArgumentParser(
     description="Train using Trainer Class from Huggingface!"
@@ -28,18 +28,18 @@ parser.add_argument(
     #    default="betoNER-finetuned-CONLL",
 )
 parser.add_argument(
-    "--train_ds",
-    type=str,
-    metavar="TRAIN_DS",
-    help="Which training dataset to use",
-    default="CONLL",
+    "--max_len",
+    type=int,
+    metavar="MAX LEN",
+    help="Maximum length of tokens",
+    default=512,
 )
 parser.add_argument(
-    "--valid_ds",
-    type=str,
-    metavar="VALID_DS",
-    help="Which validation dataset to use",
-    default="CONLL",
+    "--percentage",
+    type=int,
+    metavar="PERCENTAGE",
+    help="Percentage of training dataset",
+    default=100,
 )
 parser.add_argument(
     "--epochs",
@@ -66,8 +66,8 @@ parser.add_argument(
 args = parser.parse_args()
 
 OUTPUT_DIR = f"results/{args.output}"
-TRAIN = args.train_ds
-VALID = args.valid_ds
+MAX_LEN = args.max_len
+PERC = args.percentage
 EPOCHS = args.epochs
 LEARNING_RATE = args.lr
 BATCH_SIZE = args.batch_size
@@ -140,34 +140,10 @@ def main():
         mlflow.log_param("a", 1)
         mlflow.log_metric("b", 2)
 
-    test_ds = load_dataset("conll2002", "es", split="test")
-
-    removable_columns_conll = ["id", "pos_tags", "ner_tags", "tokens"]
-    removable_columns_wikineural = ["lang", "ner_tags"]
-
-    if TRAIN == TRAIN_DS[0]:
-        rem_columns_train = removable_columns_conll
-        train_ds = load_dataset("conll2002", "es", split="train")
-    elif TRAIN == TRAIN_DS[1]:
-        rem_columns_train = removable_columns_conll
-        train_ds = train_ds = load_dataset(
-            "NazaGara/wikiner", split="train", use_auth_token=True
-        )
-    else:
-        rem_columns_train = removable_columns_wikineural
-        train_ds = load_dataset("Babelscape/wikineural", split="train_es")
-
-    if VALID == VALID_DS[0]:
-        rem_columns_valid = removable_columns_conll
-        valid_ds = load_dataset("conll2002", "es", split="validation")
-    else:
-        rem_columns_valid = removable_columns_wikineural
-        valid_ds = load_dataset("Babelscape/wikineural", split="val_es")
-
-    valid_ds = (
-        load_dataset("conll2002", "es", split="validation")
-        if VALID == VALID_DS[0]
-        else load_dataset("Babelscape/wikineural", split="val_es")
+    train_ds, test_ds, valid_ds = load_dataset(
+        "conll2002",
+        "es",
+        split=[f"train[:{PERC}%]", f"test[:{PERC}%]", f"validation[:{PERC}%]"],
     )
 
     train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
@@ -177,20 +153,18 @@ def main():
     train_ds = train_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=rem_columns_train,
-    )
-    valid_ds = valid_ds.map(
-        tokenize_and_align_labels,
-        batched=True,
-        remove_columns=rem_columns_valid,
+        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
     )
     test_ds = test_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=removable_columns_conll,
+        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
     )
-
-    # aca tengo que ver la parte de concatenar los datasets y combinarlos.
+    valid_ds = valid_ds.map(
+        tokenize_and_align_labels,
+        batched=True,
+        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
+    )
 
     data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 
@@ -223,8 +197,8 @@ def main():
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    # evaluate_and_save(f"{OUTPUT_DIR}/train.csv", trainer, train_ds)
-    # evaluate_and_save(f"{OUTPUT_DIR}/valid.csv", trainer, valid_ds)
+    evaluate_and_save(f"{OUTPUT_DIR}/train.csv", trainer, train_ds)
+    evaluate_and_save(f"{OUTPUT_DIR}/valid.csv", trainer, valid_ds)
     evaluate_and_save(f"{OUTPUT_DIR}/test.csv", trainer, test_ds)
 
 
