@@ -164,12 +164,6 @@ def main():
         rem_columns_valid = removable_columns_wikineural
         valid_ds = load_dataset("Babelscape/wikineural", split="val_es")
 
-    valid_ds = (
-        load_dataset("conll2002", "es", split="validation")
-        if VALID == VALID_DS[0]
-        else load_dataset("Babelscape/wikineural", split="val_es")
-    )
-
     train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
     test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
     valid_ds = valid_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
