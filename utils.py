@@ -64,7 +64,7 @@ def compute_metrics(pred: EvalPrediction) -> dict:
     predictions = np.argmax(logits, axis=-1)
     labels, predictions = correct_pad(labels, predictions)
 
-    return metric.compute(predictions=predictions, references=labels, average="micro")
+    return metric.compute(predictions=predictions, references=labels, average="macro")
 
 
 from sklearn.metrics import (
