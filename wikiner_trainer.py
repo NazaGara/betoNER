@@ -71,7 +71,10 @@ print(f"device: {DEVICE}")
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
 model = AutoModelForTokenClassification.from_pretrained(
-    checkpoint, num_labels=len(LABEL_LIST)
+    checkpoint,
+    num_labels=9,
+    id2label=TOKEN_MAP,
+    label2id=LABEL_MAP,
 )
 
 
