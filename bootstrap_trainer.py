@@ -118,41 +118,6 @@ def output_phrase(phrase: str, trainer: Trainer) -> str:
     return res
 
 
-def correct_pad_not_flat(labels, preds):
-    unpad_labels, unpad_preds = [], []
-    for idx, label in enumerate(labels):
-        a, i = label[1], 1
-        while a != IGNORE_INDEX and i < (len(label) - 1):
-            i += 1
-            a = label[i]
-        unpad_labels.append(label[1:i])
-        unpad_preds.append(preds[idx][1:i])
-
-    assert len(unpad_labels) == len(unpad_preds)
-
-    return unpad_labels, unpad_preds
-
-
-def bootstrap_dataset(ds: Dataset, trainer: Trainer):
-    """
-    Para poder evaluar en base a un Dataset con el mismo formato que fue
-    entrenado este modelo
-    """
-    predictions = trainer.predict(ds)
-    preds = predictions.predictions.argmax(-1)
-    labels = predictions.label_ids
-
-    unpad_labels, unpad_preds = correct_pad_not_flat(labels, preds)
-
-    good_examples_idxs = set()
-    for i in range(len(ds)):
-        if np.equal(unpad_labels[i], unpad_preds[i]).all():
-            good_examples_idxs.add(i)
-
-    dataset = ds.select(list(good_examples_idxs))
-    return dataset
-
-
 def main():
 
     mlflow.set_experiment(f"{OUTPUT_DIR}")
@@ -196,7 +161,6 @@ def main():
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         save_strategy="no",  # esto para no hacer checkpointing
-        logging_steps=50,
         evaluation_strategy="epoch",
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,

@@ -1,4 +1,5 @@
 # utils.py
+from traitlets import Bool
 import torch
 import pandas as pd
 import numpy as np
@@ -33,9 +34,11 @@ def flat_list(t: list) -> list:
 
 def correct_pad(labels, preds):
     """
-    Function that removes the pad elements present in the labels and in the
-    predictions. Retorns a tuple with the flatten unpadded lists, ready to be
-    used in the metric function.
+    Funcion que elimina los elementos que se agregaron por el pad en las
+    predicciones. Retorna una tupla con las listas luego del flattening, listas
+    para poder usarse con las metricas.
+    NOTAR: elimina los elementos a izquierda, si el padding se realiza en la
+    tokenizacion no se corrije.
     """
     # detect pad
     unpad_labels, unpad_preds = [], []
@@ -99,6 +102,11 @@ def evaluate(trainer: Trainer, ds: Dataset) -> dict:
 
 
 def evaluate_and_save(filename, trainer: Trainer, ds: Dataset):
+    """
+    Para poder evaluar en base a un Dataset con el mismo formato que fue
+    entrenado este modelo, ademas guarda un heatmap de las predicciones de las
+    clases y .csv con el nombre del filename.
+    """
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
     labels = predictions.label_ids
@@ -128,8 +136,81 @@ def evaluate_and_save(filename, trainer: Trainer, ds: Dataset):
 
 def dump_log(filename, trainer: Trainer):
     """
-    Save the log from the training into a filename on the OUTPUT DIR directory
+    Guarda el log del trainer en el filename indicado.
     """
     with open(f"{filename}", "w+") as f:
         for obj in trainer.state.log_history:
             json.dump(obj, f, indent=2)
+
+
+def correct_pad_not_flat(labels, preds):
+    """
+    Igual que correct_pad pero no hace el flattening al final.
+    """
+    unpad_labels, unpad_preds = [], []
+    for idx, label in enumerate(labels):
+        a, i = label[1], 1
+        while a != IGNORE_INDEX and i < (len(label) - 1):
+            i += 1
+            a = label[i]
+        unpad_labels.append(label[1:i])
+        unpad_preds.append(preds[idx][1:i])
+
+    assert len(unpad_labels) == len(unpad_preds)
+
+    return unpad_labels, unpad_preds
+
+
+def bootstrap_dataset(ds: Dataset, trainer: Trainer) -> Dataset:
+    """
+    Funcion que realiza un bootstrap de un dataset a partir de un trainer.
+    Retorna el dataset original cuyos ejemplos tienen las labels que coinciden
+    con las predichas por el modelo.
+    """
+    predictions = trainer.predict(ds)
+    preds = predictions.predictions.argmax(-1)
+    labels = predictions.label_ids
+
+    unpad_labels, unpad_preds = correct_pad_not_flat(labels, preds)
+
+    good_examples_idxs = set()
+    for i in range(len(ds)):
+        if np.equal(unpad_labels[i], unpad_preds[i]).all():
+            good_examples_idxs.add(i)
+
+    dataset = ds.select(list(good_examples_idxs))
+    return dataset
+
+
+def filter_predictions(arr, THRESHOLD=1) -> Bool:
+    """
+    Funcion que a partir de una lista o arreglo de numpy, determina la
+    seguridad de las predicciones de cada palabra utilizando el threshold.
+    """
+    sorted_desc = np.sort(arr)[::-1]
+    return abs(sorted_desc[0] - sorted_desc[1]) > THRESHOLD or sorted_desc[0] == -100
+
+
+def bootstrap_fine_grained(ds: Dataset, trainer: Trainer, THRESHOLD=1) -> Dataset:
+    """
+    Realiza un bootstrap utilizando la funcion previa para poder verificar
+    que las predicciones tengan un nivel de seguridad minimo, y tambien
+    verifica que las predicciones originales del dataset sean correctas.
+    Retorna un dataset con los ejemplos que pasen los filtros.
+    """
+    predictions = trainer.predict(ds)
+
+    preds = predictions.predictions.argmax(-1)
+    labels = predictions.label_ids
+    unpad_labels, unpad_preds = correct_pad_not_flat(labels, preds)
+
+    idxs = set()
+    for i, pred in enumerate(predictions.predictions):
+        may_pass = []
+        for pred_cl in pred:
+            may_pass.append(filter_predictions(pred_cl, THRESHOLD))
+        if all(may_pass) and np.equal(unpad_labels[i], unpad_preds[i]).all():
+            idxs.add(i)
+
+    dataset = ds.select(list(idxs))
+    return dataset
