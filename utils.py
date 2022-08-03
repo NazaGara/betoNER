@@ -1,5 +1,4 @@
 # utils.py
-from traitlets import Bool
 import torch
 import pandas as pd
 import numpy as np
@@ -182,7 +181,7 @@ def bootstrap_dataset(ds: Dataset, trainer: Trainer) -> Dataset:
     return dataset
 
 
-def filter_predictions(arr, THRESHOLD=1) -> Bool:
+def filter_predictions(arr, THRESHOLD=1) :
     """
     Funcion que a partir de una lista o arreglo de numpy, determina la
     seguridad de las predicciones de cada palabra utilizando el threshold.

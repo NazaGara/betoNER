@@ -11,7 +11,7 @@ from transformers import (
     DataCollatorForTokenClassification,
 )
 
-from datasets import load_dataset, Dataset
+from datasets import load_dataset, Dataset, concatenate_datasets
 
 from utils import *
 
@@ -188,7 +188,7 @@ def main():
 
     ## bootstrapping
 
-    new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:100%]")
+    new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:70%]")
     new_train_ds = new_train_ds.filter(
         lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
     )
@@ -197,8 +197,18 @@ def main():
         batched=True,
         remove_columns=removable_columns_wikineural,
     )
+    new_valid_ds = load_dataset("Babelscape/wikineural", split="val_es")
+    new_valid_ds = new_valid_ds.filter(
+        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
+    )
+    new_valid_ds = new_valid_ds.map(
+        tokenize_and_align_labels,
+        batched=True,
+        remove_columns=removable_columns_wikineural,
+    )
 
-    bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
+    #bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
+    bootstraped_ds = bootstrap_fine_grained(new_train_ds, trainer)
 
     dump_log(f"{OUTPUT_DIR}/pre_boot/logs.txt", trainer)
 
