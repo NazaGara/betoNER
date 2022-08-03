@@ -59,8 +59,9 @@ print(f"device: {device}")
 
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
+
 model = AutoModelForTokenClassification.from_pretrained(
-    checkpoint,
+    'results/conll_baseline/trained_model/',
     num_labels=9,
     id2label=TOKEN_MAP,
     label2id=LABEL_MAP,
@@ -180,12 +181,13 @@ def main():
         compute_metrics=compute_metrics,
     )
 
-    trainer.train()
+    #trainer.train()
 
-    trainer.save_model(f"{OUTPUT_DIR}/pre_boot/trained_model/")
+    #trainer.save_model(f"{OUTPUT_DIR}/pre_boot/trained_model/")
 
-    evaluate_and_save(f"{OUTPUT_DIR}/pre_boot/test.csv", trainer, test_ds)
+    #evaluate_and_save(f"{OUTPUT_DIR}/pre_boot/test.csv", trainer, test_ds)
 
+    #dump_log(f"{OUTPUT_DIR}/pre_boot/logs.txt", trainer)
     ## bootstrapping
 
     new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:70%]")
@@ -210,13 +212,8 @@ def main():
     #bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
     bootstraped_ds = bootstrap_fine_grained(new_train_ds, trainer)
 
-    dump_log(f"{OUTPUT_DIR}/pre_boot/logs.txt", trainer)
-
-    model_b = AutoModelForTokenClassification.from_pretrained(
-        "{OUTPUT_DIR}/pre_boot/trained_model/", num_labels=9
-    )
     trainer_b = Trainer(
-        model=model_b,
+        model=model,
         args=training_args,
         train_dataset=bootstraped_ds,
         eval_dataset=valid_ds,
@@ -226,7 +223,7 @@ def main():
     )
 
     trainer_b.train()
-
+    dump_log(f"{OUTPUT_DIR}/logs.txt", trainer_b)
     evaluate_and_save(f"{OUTPUT_DIR}/test.csv", trainer_b, test_ds)
 
 
