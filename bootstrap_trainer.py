@@ -190,7 +190,7 @@ def main():
     #dump_log(f"{OUTPUT_DIR}/pre_boot/logs.txt", trainer)
     ## bootstrapping
 
-    new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:70%]")
+    new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:75%]")
     new_train_ds = new_train_ds.filter(
         lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
     )
@@ -211,6 +211,9 @@ def main():
 
     #bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
     bootstraped_ds = bootstrap_fine_grained(new_train_ds, trainer)
+    valid_bootstraped_ds = bootstrap_fine_grained(new_valid_ds, trainer)
+
+    valid_ds = concatenate_datasets([valid_ds, valid_bootstraped_ds]).shuffle(seed=10)
 
     trainer_b = Trainer(
         model=model,

@@ -22,7 +22,7 @@ args = parser.parse_args()
 
 name = args.name
 TRAINER = args.trainer
-BATCH_SIZES = [8,16]
+BATCH_SIZES = [16]
 EPOCHS = [2,3,4]
 LR = [1e-5, 2e-5, 3e-5]
 
