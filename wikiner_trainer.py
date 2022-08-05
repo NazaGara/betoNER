@@ -92,11 +92,9 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
         is_split_into_words=True,
         truncation=True,
         return_token_type_ids=False,
-        # max_length=MAX_LEN,
-        # padding="max_length",
     )
 
-    labels = []
+    labels, w_ids = [], []
     for i, label in enumerate(examples["ner_tags"]):
         word_ids = tokenized_inputs.word_ids(
             batch_index=i
@@ -115,8 +113,10 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
                 label_ids.append(label[word_idx])
             previous_word_idx = word_idx
         labels.append(label_ids)
+        w_ids.append(word_ids)
 
     tokenized_inputs["labels"] = labels
+    tokenized_inputs["word_ids"] = w_ids
     return tokenized_inputs
 
 

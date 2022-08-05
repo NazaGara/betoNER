@@ -31,6 +31,27 @@ def flat_list(t: list) -> list:
     return [item for sublist in t for item in sublist]
 
 
+def correct_padding(word_ids: list, labels: list, preds: list) -> list:
+    new_labels, new_preds = [], []
+    for i in range(len(word_ids)):
+        lab, pred = [], []
+        label_list, pred_list = labels[i], preds[i]
+        prev_idx = None
+        for j, word_idx in enumerate(word_ids[i]):
+            if word_idx == None:
+                pass  # no agrego el [CLS] ni [SEP] ni cualquier otro que no correponda.
+            elif word_idx == prev_idx:
+                pass  # no tengo que agregar nada, sigue siendo la misma palabra.
+            else:
+                lab.append(label_list[j])  # lab.append(TOKEN_MAP[label_list[j]])
+                pred.append(pred_list[j])
+            prev_idx = word_idx
+        new_labels.append(lab)
+        new_preds.append(pred)
+
+    return new_labels, new_preds
+
+
 def correct_pad(labels, preds):
     """
     Funcion que elimina los elementos que se agregaron por el pad en las
@@ -86,12 +107,16 @@ def evaluate(trainer: Trainer, ds: Dataset) -> dict:
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
     labels = predictions.label_ids
-    # flat_preds, flat_labels = correct_pad(labels, preds)
-    flat_labels, flat_preds = correct_pad(labels, preds)
-    # assert len(flat_preds) == len(flat_labels)
+    word_ids = ds["word_ids"]
 
-    # f1_macro = f1_score(flat_labels, flat_preds, average="macro")
-    # acc = accuracy_score(flat_labels, flat_preds)
+    # flat_labels, flat_preds = correct_pad(labels, preds)
+
+    # flat_labels = flat_list(correct_padding(word_ids, labels))
+    # flat_preds = flat_list(correct_padding(word_ids, preds))
+
+    unpad_labels, unpad_preds = correct_padding(word_ids, labels, preds)
+    flat_labels, flat_preds = flat_list(unpad_labels), flat_list(unpad_preds)
+
     return classification_report(
         flat_labels,
         flat_preds,
@@ -109,10 +134,15 @@ def evaluate_and_save(filename, trainer: Trainer, ds: Dataset):
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
     labels = predictions.label_ids
+    word_ids = ds["word_ids"]
 
-    # flat_preds, flat_labels = correct_pad(labels, preds)
-    flat_labels, flat_preds = correct_pad(labels, preds)
-    # assert len(flat_preds) == len(flat_labels)
+    # flat_labels, flat_preds = correct_pad(labels, preds)
+
+    # flat_labels = flat_list(correct_padding(word_ids, labels))
+    # flat_preds = flat_list(correct_padding(word_ids, preds))
+
+    unpad_labels, unpad_preds = correct_padding(word_ids, labels, preds)
+    flat_labels, flat_preds = flat_list(unpad_labels), flat_list(unpad_preds)
 
     report = classification_report(
         flat_labels,
@@ -169,8 +199,9 @@ def bootstrap_dataset(ds: Dataset, trainer: Trainer) -> Dataset:
     predictions = trainer.predict(ds)
     preds = predictions.predictions.argmax(-1)
     labels = predictions.label_ids
+    word_ids = ds["word_ids"]
 
-    unpad_labels, unpad_preds = correct_pad_not_flat(labels, preds)
+    unpad_labels, unpad_preds = correct_padding(word_ids, labels, preds)
 
     good_examples_idxs = set()
     for i in range(len(ds)):
@@ -181,7 +212,7 @@ def bootstrap_dataset(ds: Dataset, trainer: Trainer) -> Dataset:
     return dataset
 
 
-def filter_predictions(arr, THRESHOLD=1) :
+def filter_predictions(arr, THRESHOLD=1):
     """
     Funcion que a partir de una lista o arreglo de numpy, determina la
     seguridad de las predicciones de cada palabra utilizando el threshold.
@@ -201,7 +232,9 @@ def bootstrap_fine_grained(ds: Dataset, trainer: Trainer, THRESHOLD=1) -> Datase
 
     preds = predictions.predictions.argmax(-1)
     labels = predictions.label_ids
-    unpad_labels, unpad_preds = correct_pad_not_flat(labels, preds)
+    word_ids = ds["word_ids"]
+
+    unpad_labels, unpad_preds = correct_padding(word_ids, labels, preds)
 
     idxs = set()
     for i, pred in enumerate(predictions.predictions):

@@ -78,7 +78,10 @@ print(f"device: {device}")
 checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
 model = AutoModelForTokenClassification.from_pretrained(
-    checkpoint, num_labels=9, id2label=TOKEN_MAP, label2id=LABEL_MAP,
+    checkpoint,
+    num_labels=9,
+    id2label=TOKEN_MAP,
+    label2id=LABEL_MAP,
 )
 
 from transformers.tokenization_utils_base import BatchEncoding
@@ -97,7 +100,7 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
         return_token_type_ids=False,
     )
 
-    labels = []
+    labels, w_ids = [], []
     for i, label in enumerate(examples["ner_tags"]):
         word_ids = tokenized_inputs.word_ids(
             batch_index=i
@@ -116,8 +119,10 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
                 label_ids.append(label[word_idx])
             previous_word_idx = word_idx
         labels.append(label_ids)
+        w_ids.append(word_ids)
 
     tokenized_inputs["labels"] = labels
+    tokenized_inputs["word_ids"] = w_ids
     return tokenized_inputs
 
 
@@ -197,8 +202,8 @@ def main():
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    #evaluate_and_save(f"{OUTPUT_DIR}/train.csv", trainer, train_ds)
-    #evaluate_and_save(f"{OUTPUT_DIR}/valid.csv", trainer, valid_ds)
+    # evaluate_and_save(f"{OUTPUT_DIR}/train.csv", trainer, train_ds)
+    # evaluate_and_save(f"{OUTPUT_DIR}/valid.csv", trainer, valid_ds)
     evaluate_and_save(f"{OUTPUT_DIR}/test.csv", trainer, test_ds)
 
 

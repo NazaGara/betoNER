@@ -61,7 +61,7 @@ checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
 
 model = AutoModelForTokenClassification.from_pretrained(
-    'results/conll_baseline/trained_model/',
+    "results/conll_baseline/trained_model/",
     num_labels=9,
     id2label=TOKEN_MAP,
     label2id=LABEL_MAP,
@@ -83,7 +83,7 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
         return_token_type_ids=False,
     )
 
-    labels = []
+    labels, w_ids = [], []
     for i, label in enumerate(examples["ner_tags"]):
         word_ids = tokenized_inputs.word_ids(
             batch_index=i
@@ -102,8 +102,10 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
                 label_ids.append(label[word_idx])
             previous_word_idx = word_idx
         labels.append(label_ids)
+        w_ids.append(word_ids)
 
     tokenized_inputs["labels"] = labels
+    tokenized_inputs["word_ids"] = w_ids
     return tokenized_inputs
 
 
@@ -181,13 +183,13 @@ def main():
         compute_metrics=compute_metrics,
     )
 
-    #trainer.train()
+    # trainer.train()
 
-    #trainer.save_model(f"{OUTPUT_DIR}/pre_boot/trained_model/")
+    # trainer.save_model(f"{OUTPUT_DIR}/pre_boot/trained_model/")
 
-    #evaluate_and_save(f"{OUTPUT_DIR}/pre_boot/test.csv", trainer, test_ds)
+    # evaluate_and_save(f"{OUTPUT_DIR}/pre_boot/test.csv", trainer, test_ds)
 
-    #dump_log(f"{OUTPUT_DIR}/pre_boot/logs.txt", trainer)
+    # dump_log(f"{OUTPUT_DIR}/pre_boot/logs.txt", trainer)
     ## bootstrapping
 
     new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:75%]")
@@ -209,7 +211,7 @@ def main():
         remove_columns=removable_columns_wikineural,
     )
 
-    #bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
+    # bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
     bootstraped_ds = bootstrap_fine_grained(new_train_ds, trainer)
     valid_bootstraped_ds = bootstrap_fine_grained(new_valid_ds, trainer)
 
