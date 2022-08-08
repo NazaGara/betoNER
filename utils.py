@@ -232,3 +232,20 @@ def bootstrap_fine_grained(ds: Dataset, trainer: Trainer, THRESHOLD=0.95) -> Dat
 
     dataset = ds.select(list(idxs))
     return dataset
+
+
+def train_coverage(ds: Dataset) -> set():
+    """
+    Function that creates a set with tuples, containing the words and the corresponding label.
+    It serves to identify the quantity and type of entities with which the model will be trained.
+    The dataset to use must be pre-processed.
+    """
+    labels, words, k = ds["labels"], ds["tokens"], len(ds)
+    word_ids = ds["word_ids"]
+    tags, _ = correct_padding(word_ids, labels, labels)
+    res = set()
+    for i in range(k):
+        for j, t in enumerate(tags[i]):
+            if t != 0 and t != -100:
+                res.add((TOKEN_MAP[t], words[i][j]))
+    return res

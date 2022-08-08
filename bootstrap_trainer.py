@@ -130,7 +130,7 @@ def main():
 
     test_ds = load_dataset("conll2002", "es", split="test")
 
-    removable_columns_conll = ["id", "pos_tags", "ner_tags", "tokens"]
+    removable_columns_conll = ["id", "pos_tags", "ner_tags"]  # , "tokens"]
     removable_columns_wikineural = ["lang", "ner_tags"]
 
     train_ds, test_ds, valid_ds = load_dataset(
@@ -190,6 +190,7 @@ def main():
     # evaluate_and_save(f"{OUTPUT_DIR}/pre_boot/test.csv", trainer, test_ds)
 
     # dump_log(f"{OUTPUT_DIR}/pre_boot/logs.txt", trainer)
+
     ## bootstrapping
 
     new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:75%]")
@@ -213,9 +214,16 @@ def main():
 
     # bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
     bootstraped_ds = bootstrap_fine_grained(new_train_ds, trainer)
-    valid_bootstraped_ds = bootstrap_fine_grained(new_valid_ds, trainer)
+    # valid_bootstraped_ds = bootstrap_fine_grained(new_valid_ds, trainer)
 
-    valid_ds = concatenate_datasets([valid_ds, valid_bootstraped_ds]).shuffle(seed=10)
+    # valid_ds = concatenate_datasets([valid_ds, valid_bootstraped_ds]).shuffle(seed=10)
+
+    conll_ents = train_coverage(train_ds)
+    new_ents = train_coverage(bootstraped_ds)
+    with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
+        f.write(f"Conll entities: {len(conll_ents)}\n")
+        f.write(f"New entities: {len(new_ents)}\n")
+        f.write(f"Total entities: {len(conll_ents|new_ents)}\n")
 
     trainer_b = Trainer(
         model=model,
