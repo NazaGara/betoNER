@@ -172,24 +172,6 @@ def dump_log(filename, trainer: Trainer):
             json.dump(obj, f, indent=2)
 
 
-def correct_pad_not_flat(labels, preds):
-    """
-    Igual que correct_pad pero no hace el flattening al final.
-    """
-    unpad_labels, unpad_preds = [], []
-    for idx, label in enumerate(labels):
-        a, i = label[1], 1
-        while a != IGNORE_INDEX and i < (len(label) - 1):
-            i += 1
-            a = label[i]
-        unpad_labels.append(label[1:i])
-        unpad_preds.append(preds[idx][1:i])
-
-    assert len(unpad_labels) == len(unpad_preds)
-
-    return unpad_labels, unpad_preds
-
-
 def bootstrap_dataset(ds: Dataset, trainer: Trainer) -> Dataset:
     """
     Funcion que realiza un bootstrap de un dataset a partir de un trainer.
@@ -212,16 +194,21 @@ def bootstrap_dataset(ds: Dataset, trainer: Trainer) -> Dataset:
     return dataset
 
 
-def filter_predictions(arr, THRESHOLD=1):
+def softmax(x):
+    return np.exp(x) / np.sum(np.exp(x))
+
+
+def filter_predictions(arr, THRESHOLD=0.95):
     """
     Funcion que a partir de una lista o arreglo de numpy, determina la
     seguridad de las predicciones de cada palabra utilizando el threshold.
     """
-    sorted_desc = np.sort(arr)[::-1]
-    return abs(sorted_desc[0] - sorted_desc[1]) > THRESHOLD or sorted_desc[0] == -100
+    # sorted_desc = np.sort(arr)[::-1]
+    # return abs(sorted_desc[0] - sorted_desc[1]) > THRESHOLD or sorted_desc[0] == -100
+    return np.max(softmax(arr)) > THRESHOLD or np.max(arr) == -100
 
 
-def bootstrap_fine_grained(ds: Dataset, trainer: Trainer, THRESHOLD=1) -> Dataset:
+def bootstrap_fine_grained(ds: Dataset, trainer: Trainer, THRESHOLD=0.95) -> Dataset:
     """
     Realiza un bootstrap utilizando la funcion previa para poder verificar
     que las predicciones tengan un nivel de seguridad minimo, y tambien
@@ -238,10 +225,9 @@ def bootstrap_fine_grained(ds: Dataset, trainer: Trainer, THRESHOLD=1) -> Datase
 
     idxs = set()
     for i, pred in enumerate(predictions.predictions):
-        may_pass = []
-        for pred_cl in pred:
-            may_pass.append(filter_predictions(pred_cl, THRESHOLD))
-        if all(may_pass) and np.equal(unpad_labels[i], unpad_preds[i]).all():
+        if all([filter_predictions(p) for p in pred]) and (
+            np.equal(unpad_labels[i], unpad_preds[i]).all()
+        ):
             idxs.add(i)
 
     dataset = ds.select(list(idxs))
