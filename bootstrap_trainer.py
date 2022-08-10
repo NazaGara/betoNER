@@ -109,18 +109,6 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
     return tokenized_inputs
 
 
-def output_phrase(phrase: str, trainer: Trainer) -> str:
-    tokenized_input = tokenizer([phrase], return_token_type_ids=False)
-    ds = Dataset.from_dict(tokenized_input)
-    pred = trainer.predict(ds)
-    labels = pred.predictions.argmax(-1)[0]
-    res = ""
-    for i, s in enumerate(tokenized_input["input_ids"][0]):
-        # res += (s, tokenizer.decode(s), labels[i], TOKEN_MAP[labels[i]])
-        res += f"{tokenizer.decode(s)} {TOKEN_MAP[labels[i]]}\n"
-    return res
-
-
 def main():
 
     mlflow.set_experiment(f"{OUTPUT_DIR}")
@@ -193,11 +181,11 @@ def main():
 
     ## bootstrapping
 
-    new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:100%]")
-    new_train_ds = new_train_ds.filter(
+    wneural_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:100%]")
+    wneural_train_ds = wneural_train_ds.filter(
         lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
     )
-    new_train_ds = new_train_ds.map(
+    wneural_train_ds = wneural_train_ds.map(
         tokenize_and_align_labels,
         batched=True,
         remove_columns=removable_columns_wikineural,
@@ -208,41 +196,42 @@ def main():
         split="train[:01%]",
         use_auth_token=True,
     )
-    wner_train_ds = wner_train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    wner_train_ds = wner_train_ds.filter(
+        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
+    )
     wner_train_ds = wner_train_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags"]
+        remove_columns=["id", "pos_tags", "ner_tags"],
     )
 
-
-    #new_valid_ds = load_dataset("Babelscape/wikineural", split="val_es")
-    #new_valid_ds = new_valid_ds.filter(
+    # new_valid_ds = load_dataset("Babelscape/wikineural", split="val_es")
+    # new_valid_ds = new_valid_ds.filter(
     #    lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
-    #)
-    #new_valid_ds = new_valid_ds.map(
+    # )
+    # new_valid_ds = new_valid_ds.map(
     #    tokenize_and_align_labels,
     #    batched=True,
     #    remove_columns=removable_columns_wikineural,
-    #)
+    # )
 
-    wneural_bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
-    #wner_bootstraped_ds = bootstrap_fine_grained(wner_train_ds, trainer, 0.95)
-    #wneural_bootstraped_ds = bootstrap_fine_grained(new_train_ds, trainer, 0.95)
+    wneural_bootstraped_ds = bootstrap_dataset(wneural_train_ds, trainer)
+    # wner_bootstraped_ds = bootstrap_fine_grained(wner_train_ds, trainer, 0.95)
+    # wneural_bootstraped_ds = bootstrap_fine_grained(wneural_train_ds, trainer, 0.95)
 
-    #valid_ds = concatenate_datasets([valid_ds, valid_bootstraped_ds]).shuffle(seed=10)
+    # valid_ds = concatenate_datasets([valid_ds, valid_bootstraped_ds]).shuffle(seed=10)
 
     conll_ents = train_coverage(train_ds)
     wneural_ents = train_coverage(wneural_bootstraped_ds)
-    #wner_ents = train_coverage(wner_bootstraped_ds)
+    # wner_ents = train_coverage(wner_bootstraped_ds)
     with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
         f.write(f"Conll entities: {len(conll_ents)}\n")
         f.write(f"wikineural entities: {len(wneural_ents)}\n")
-    #    f.write(f"wikiner entities: {len(wner_ents)}\n")
+        #    f.write(f"wikiner entities: {len(wner_ents)}\n")
         f.write(f"Total entities: {len(conll_ents|wneural_ents)}\n")
 
-    #wner_bootstraped_ds = wner_bootstraped_ds.remove_columns(['tokens'])
-    wneural_bootstraped_ds = wneural_bootstraped_ds.remove_columns(['tokens'])
+    # wner_bootstraped_ds = wner_bootstraped_ds.remove_columns(['tokens'])
+    wneural_bootstraped_ds = wneural_bootstraped_ds.remove_columns(["tokens"])
 
     train_ds = concatenate_datasets([wneural_bootstraped_ds]).shuffle(seed=10)
 

@@ -121,18 +121,6 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
     return tokenized_inputs
 
 
-def output_phrase(phrase: str, trainer: Trainer) -> str:
-    tokenized_input = tokenizer([phrase], return_token_type_ids=False)
-    ds = Dataset.from_dict(tokenized_input)
-    pred = trainer.predict(ds)
-    labels = pred.predictions.argmax(-1)[0]
-    res = ""
-    for i, s in enumerate(tokenized_input["input_ids"][0]):
-        # res += (s, tokenizer.decode(s), labels[i], TOKEN_MAP[labels[i]])
-        res += f"{tokenizer.decode(s)} {TOKEN_MAP[labels[i]]}\n"
-    return res
-
-
 def main():
 
     mlflow.set_experiment(f"{OUTPUT_DIR}")
@@ -210,6 +198,10 @@ def main():
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
     )
+
+    ents = train_coverage(train_ds)
+    with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
+        f.write(f"{TRAIN} entities: {len(ents)}\n")
 
     trainer.train()
 

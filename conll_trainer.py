@@ -126,18 +126,6 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
     return tokenized_inputs
 
 
-def output_phrase(phrase: str, trainer: Trainer) -> str:
-    tokenized_input = tokenizer([phrase], return_token_type_ids=False)
-    ds = Dataset.from_dict(tokenized_input)
-    pred = trainer.predict(ds)
-    labels = pred.predictions.argmax(-1)[0]
-    res = ""
-    for i, s in enumerate(tokenized_input["input_ids"][0]):
-        # res += (s, tokenizer.decode(s), labels[i], TOKEN_MAP[labels[i]])
-        res += f"{tokenizer.decode(s)} {TOKEN_MAP[labels[i]]}\n"
-    return res
-
-
 def main():
 
     mlflow.set_experiment(f"{OUTPUT_DIR}")
@@ -158,17 +146,17 @@ def main():
     train_ds = train_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
+        remove_columns=["id", "pos_tags", "ner_tags"],
     )
     test_ds = test_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
+        remove_columns=["id", "pos_tags", "ner_tags"],
     )
     valid_ds = valid_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
+        remove_columns=["id", "pos_tags", "ner_tags"],
     )
 
     data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
@@ -195,6 +183,10 @@ def main():
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
     )
+
+    ents = train_coverage(train_ds)
+    with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
+        f.write(f"conll entities: {len(ents)}\n")
 
     trainer.train()
 

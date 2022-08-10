@@ -120,24 +120,18 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
     return tokenized_inputs
 
 
-def output_phrase(phrase: str, trainer: Trainer) -> str:
-    tokenized_input = tokenizer([phrase], return_token_type_ids=False)
-    ds = Dataset.from_dict(tokenized_input)
-    pred = trainer.predict(ds)
-    labels = pred.predictions.argmax(-1)[0]
-    res = ""
-    for i, s in enumerate(tokenized_input["input_ids"][0]):
-        # res += (s, tokenizer.decode(s), labels[i], TOKEN_MAP[labels[i]])
-        res += f"{tokenizer.decode(s)} {TOKEN_MAP[labels[i]]}\n"
-    return res
-
-
 import random
 from collections import Counter
+
 random.seed(10)
+
+
 def filtering(examples):
-    count = dict((TOKEN_MAP[key], value) for (key, value) in Counter(examples['ner_tags']).items())
-    return 'B-ORG' in count.keys() or random.random() > .95
+    count = dict(
+        (TOKEN_MAP[key], value)
+        for (key, value) in Counter(examples["ner_tags"]).items()
+    )
+    return "B-ORG" in count.keys() or random.random() > 0.95
 
 
 def main():
@@ -156,12 +150,14 @@ def main():
     conll_train_ds, test_ds, valid_ds = load_dataset(
         "conll2002",
         "es",
-        split=["train","test", "validation"],
+        split=["train", "test", "validation"],
     )
 
     train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
     val_ds = val_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
-    conll_train_ds = conll_train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    conll_train_ds = conll_train_ds.filter(
+        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
+    )
     test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
     valid_ds = valid_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
 
@@ -177,22 +173,21 @@ def main():
         remove_columns=["lang", "ner_tags"],
     )
 
-
     conll_train_ds = conll_train_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags"] #, "tokens"],
+        remove_columns=["id", "pos_tags", "ner_tags"],  # , "tokens"],
     )
 
     test_ds = test_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags"] #, "tokens"],
+        remove_columns=["id", "pos_tags", "ner_tags"],  # , "tokens"],
     )
     valid_ds = valid_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags"] #, "tokens"],
+        remove_columns=["id", "pos_tags", "ner_tags"],  # , "tokens"],
     )
 
     data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
@@ -210,7 +205,7 @@ def main():
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         save_strategy="no",  # esto para no hacer checkpointing
-        #logging_steps=50,
+        # logging_steps=50,
         evaluation_strategy="epoch",
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,
@@ -230,14 +225,18 @@ def main():
         compute_metrics=compute_metrics,
     )
 
+    ents = train_coverage(train_ds)
+    with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
+        f.write(f"wikineural entities: {len(ents)}\n")
+
     trainer.train()
 
     # trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
-    evaluate_and_save(f"{OUTPUT_DIR}/train.csv", trainer, train_ds)
-    evaluate_and_save(f"{OUTPUT_DIR}/valid.csv", trainer, valid_ds)
+    # evaluate_and_save(f"{OUTPUT_DIR}/train.csv", trainer, train_ds)
+    # evaluate_and_save(f"{OUTPUT_DIR}/valid.csv", trainer, valid_ds)
     evaluate_and_save(f"{OUTPUT_DIR}/test.csv", trainer, test_ds)
 
 

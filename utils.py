@@ -163,7 +163,7 @@ def evaluate_and_save(filename, trainer: Trainer, ds: Dataset):
     return report
 
 
-def dump_log(filename, trainer: Trainer):
+def dump_log(filename, trainer: Trainer) -> None:
     """
     Guarda el log del trainer en el filename indicado.
     """
