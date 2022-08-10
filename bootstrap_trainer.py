@@ -193,7 +193,7 @@ def main():
 
     ## bootstrapping
 
-    new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:75%]")
+    new_train_ds = load_dataset("Babelscape/wikineural", split="train_es[:100%]")
     new_train_ds = new_train_ds.filter(
         lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
     )
@@ -202,33 +202,54 @@ def main():
         batched=True,
         remove_columns=removable_columns_wikineural,
     )
-    new_valid_ds = load_dataset("Babelscape/wikineural", split="val_es")
-    new_valid_ds = new_valid_ds.filter(
-        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
+
+    wner_train_ds = load_dataset(
+        "NazaGara/wikiner",
+        split="train[:01%]",
+        use_auth_token=True,
     )
-    new_valid_ds = new_valid_ds.map(
+    wner_train_ds = wner_train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    wner_train_ds = wner_train_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=removable_columns_wikineural,
+        remove_columns=["id", "pos_tags", "ner_tags"]
     )
 
-    # bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
-    bootstraped_ds = bootstrap_fine_grained(new_train_ds, trainer)
-    # valid_bootstraped_ds = bootstrap_fine_grained(new_valid_ds, trainer)
 
-    # valid_ds = concatenate_datasets([valid_ds, valid_bootstraped_ds]).shuffle(seed=10)
+    #new_valid_ds = load_dataset("Babelscape/wikineural", split="val_es")
+    #new_valid_ds = new_valid_ds.filter(
+    #    lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
+    #)
+    #new_valid_ds = new_valid_ds.map(
+    #    tokenize_and_align_labels,
+    #    batched=True,
+    #    remove_columns=removable_columns_wikineural,
+    #)
+
+    wneural_bootstraped_ds = bootstrap_dataset(new_train_ds, trainer)
+    #wner_bootstraped_ds = bootstrap_fine_grained(wner_train_ds, trainer, 0.95)
+    #wneural_bootstraped_ds = bootstrap_fine_grained(new_train_ds, trainer, 0.95)
+
+    #valid_ds = concatenate_datasets([valid_ds, valid_bootstraped_ds]).shuffle(seed=10)
 
     conll_ents = train_coverage(train_ds)
-    new_ents = train_coverage(bootstraped_ds)
+    wneural_ents = train_coverage(wneural_bootstraped_ds)
+    #wner_ents = train_coverage(wner_bootstraped_ds)
     with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
         f.write(f"Conll entities: {len(conll_ents)}\n")
-        f.write(f"New entities: {len(new_ents)}\n")
-        f.write(f"Total entities: {len(conll_ents|new_ents)}\n")
+        f.write(f"wikineural entities: {len(wneural_ents)}\n")
+    #    f.write(f"wikiner entities: {len(wner_ents)}\n")
+        f.write(f"Total entities: {len(conll_ents|wneural_ents)}\n")
+
+    #wner_bootstraped_ds = wner_bootstraped_ds.remove_columns(['tokens'])
+    wneural_bootstraped_ds = wneural_bootstraped_ds.remove_columns(['tokens'])
+
+    train_ds = concatenate_datasets([wneural_bootstraped_ds]).shuffle(seed=10)
 
     trainer_b = Trainer(
         model=model,
         args=training_args,
-        train_dataset=bootstraped_ds,
+        train_dataset=train_ds,
         eval_dataset=valid_ds,
         data_collator=data_collator,
         tokenizer=tokenizer,

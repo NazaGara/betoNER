@@ -1,4 +1,4 @@
-# trainer.py
+# traiier.py
 import torch
 import mlflow
 import pandas as pd
@@ -132,6 +132,14 @@ def output_phrase(phrase: str, trainer: Trainer) -> str:
     return res
 
 
+import random
+from collections import Counter
+random.seed(10)
+def filtering(examples):
+    count = dict((TOKEN_MAP[key], value) for (key, value) in Counter(examples['ner_tags']).items())
+    return 'B-ORG' in count.keys() or random.random() > .95
+
+
 def main():
 
     mlflow.set_experiment(f"{OUTPUT_DIR}")
@@ -139,44 +147,70 @@ def main():
         mlflow.log_param("a", 1)
         mlflow.log_metric("b", 2)
 
-    train_ds, test_ds, val_ds = load_dataset(
-        "Babelscape/wikineural", split=[f"train_es", f"test_es", f"val_es"]
+    train_ds, wneural_test_ds, val_ds = load_dataset(
+        "Babelscape/wikineural", split=[f"train_es[:50%]", f"test_es", f"val_es"]
     )
 
     # train_ds = concatenate_datasets([train_ds, test_ds, val_ds])
 
-    test_ds, valid_ds = load_dataset(
+    conll_train_ds, test_ds, valid_ds = load_dataset(
         "conll2002",
         "es",
-        split=["test", "validation"],
+        split=["train","test", "validation"],
     )
 
     train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    val_ds = val_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
+    conll_train_ds = conll_train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
     test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
     valid_ds = valid_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
 
+    train_ds = train_ds.filter(filtering)
     train_ds = train_ds.map(
         tokenize_and_align_labels,
         batched=True,
         remove_columns=["lang", "ner_tags"],
     )
+    val_ds = val_ds.map(
+        tokenize_and_align_labels,
+        batched=True,
+        remove_columns=["lang", "ner_tags"],
+    )
+
+
+    conll_train_ds = conll_train_ds.map(
+        tokenize_and_align_labels,
+        batched=True,
+        remove_columns=["id", "pos_tags", "ner_tags"] #, "tokens"],
+    )
+
     test_ds = test_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
+        remove_columns=["id", "pos_tags", "ner_tags"] #, "tokens"],
     )
     valid_ds = valid_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags", "tokens"],
+        remove_columns=["id", "pos_tags", "ner_tags"] #, "tokens"],
     )
 
     data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 
+    conll_ents = train_coverage(conll_train_ds)
+    new_ents = train_coverage(train_ds)
+    with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
+        f.write(f"Conll entities: {len(conll_ents)}\n")
+        f.write(f"New entities: {len(new_ents)}\n")
+        f.write(f"Total entities: {len(conll_ents|new_ents)}\n")
+
+    train_ds = concatenate_datasets([train_ds, conll_train_ds]).shuffle(seed=10)
+    valid_ds = concatenate_datasets([valid_ds, val_ds]).shuffle(seed=10)
+
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         save_strategy="no",  # esto para no hacer checkpointing
-        logging_steps=50,
+        #logging_steps=50,
         evaluation_strategy="epoch",
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,
