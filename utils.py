@@ -97,6 +97,23 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
 )
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+
+COLOR_LIST = [
+    "#2e2b28",
+    "#2e2b28",
+    "#2e2b28",
+    "#2e2b28",
+    "#2e2b28",
+    "#2e2b28",
+    "#c23728",
+    "#c23728",
+    "#e14b31",
+    "#e14b31",
+    "#ffffff",
+][::-1]
+# ["#2e2b28","#2e2b28", "#2e2b28", "#2e2b28", "#2e2b28", "#2e2b28",  "#c23728", "#e14b31","#de6e56", "#e1a692","#fd7f6f", "#ffffff"][::-1]
+CMAP = LinearSegmentedColormap.from_list("cusotm_pastel", COLOR_LIST)
 
 
 def evaluate(trainer: Trainer, ds: Dataset) -> dict:
@@ -154,7 +171,7 @@ def evaluate_and_save(filename, trainer: Trainer, ds: Dataset):
     y_true = [*map(TOKEN_MAP.get, flat_labels)]
     y_pred = [*map(TOKEN_MAP.get, flat_preds)]
     fig, ax = plt.subplots(figsize=(15, 15))
-    ConfusionMatrixDisplay.from_predictions(y_true, y_pred, ax=ax, cmap="gist_ncar_r")
+    ConfusionMatrixDisplay.from_predictions(y_true, y_pred, ax=ax, cmap=CMAP)
 
     plt.savefig(f"{filename}_heatmap.png")
 
