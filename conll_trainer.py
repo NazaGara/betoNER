@@ -185,15 +185,15 @@ def main():
     )
 
     ents = train_coverage(train_ds)
-    with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
-        f.write(f"conll entities: {len(ents)}\n")
 
     trainer.train()
 
-    trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
+    #trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
+    with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
+        f.write(f"conll entities: {len(ents)}\n")
     # evaluate_and_save(f"{OUTPUT_DIR}/train.csv", trainer, train_ds)
     # evaluate_and_save(f"{OUTPUT_DIR}/valid.csv", trainer, valid_ds)
     evaluate_and_save(f"{OUTPUT_DIR}/test.csv", trainer, test_ds)

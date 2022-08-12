@@ -131,7 +131,7 @@ def filtering(examples):
         (TOKEN_MAP[key], value)
         for (key, value) in Counter(examples["ner_tags"]).items()
     )
-    return "B-ORG" in count.keys() or random.random() > 0.95
+    return "B-LOC" in count.keys() or "B-PER" in count.keys() or random.random() > 0.95
 
 
 def main():
@@ -194,13 +194,9 @@ def main():
 
     conll_ents = train_coverage(conll_train_ds)
     new_ents = train_coverage(train_ds)
-    with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
-        f.write(f"Conll entities: {len(conll_ents)}\n")
-        f.write(f"New entities: {len(new_ents)}\n")
-        f.write(f"Total entities: {len(conll_ents|new_ents)}\n")
 
     train_ds = concatenate_datasets([train_ds, conll_train_ds]).shuffle(seed=10)
-    valid_ds = concatenate_datasets([valid_ds, val_ds]).shuffle(seed=10)
+    #valid_ds = concatenate_datasets([valid_ds, val_ds]).shuffle(seed=10)
 
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
@@ -225,16 +221,16 @@ def main():
         compute_metrics=compute_metrics,
     )
 
-    ents = train_coverage(train_ds)
-    with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
-        f.write(f"wikineural entities: {len(ents)}\n")
-
     trainer.train()
 
     # trainer.save_model(f"{OUTPUT_DIR}/trained_model/")
 
     dump_log(f"{OUTPUT_DIR}/logs.txt", trainer)
 
+    with open(f"{OUTPUT_DIR}/coverage.txt", "w+") as f:
+        f.write(f"Conll entities: {len(conll_ents)}\n")
+        f.write(f"New entities: {len(new_ents)}\n")
+        f.write(f"Total entities: {len(conll_ents|new_ents)}\n")
     # evaluate_and_save(f"{OUTPUT_DIR}/train.csv", trainer, train_ds)
     # evaluate_and_save(f"{OUTPUT_DIR}/valid.csv", trainer, valid_ds)
     evaluate_and_save(f"{OUTPUT_DIR}/test.csv", trainer, test_ds)

@@ -208,13 +208,13 @@ def main():
     wneural_test_ds = wneural_test_ds.filter(
         lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
     )
-    wneural_test_ds = wneural_test_ds.map(
+    test_ds = wneural_test_ds.map(
         tokenize_and_align_labels,
         batched=True,
         remove_columns=removable_columns_wikineural,
     )
 
-    test_ds = bootstrap_fine_grained(wneural_test_ds, trainer, 0.95)
+    #test_ds = bootstrap_fine_grained(wneural_test_ds, trainer, 0.95)
 
     evaluate_and_save(f"{OUTPUT_DIR}/test.csv", trainer, test_ds)
 
