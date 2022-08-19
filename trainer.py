@@ -10,36 +10,17 @@ from transformers import (
     DataCollatorForTokenClassification,
 )
 
-from datasets import load_dataset, Dataset
+from datasets import load_dataset, Dataset, concatenate_datasets
 
 from utils import *
 
-TRAIN_DS = ["CONLL", "WIKINER", "WIKINEURAL"]
-VALID_DS = ["CONLL", "WIKINEURAL"]
-
-parser = argparse.ArgumentParser(
-    description="Train using Trainer Class from Huggingface!"
-)
+parser = argparse.ArgumentParser(description="Train BETO to perform the NER task")
 parser.add_argument(
     "output",
     type=str,
     metavar="OUTPUT",
     help="Directory to store the model.",
-    #    default="betoNER-finetuned-CONLL",
-)
-parser.add_argument(
-    "--train_ds",
-    type=str,
-    metavar="TRAIN_DS",
-    help="Which training dataset to use",
-    default="CONLL",
-)
-parser.add_argument(
-    "--valid_ds",
-    type=str,
-    metavar="VALID_DS",
-    help="Which validation dataset to use",
-    default="CONLL",
+    default="betoNER-finetuned",
 )
 parser.add_argument(
     "--epochs",
@@ -66,8 +47,6 @@ parser.add_argument(
 args = parser.parse_args()
 
 OUTPUT_DIR = f"results/{args.output}"
-TRAIN = args.train_ds
-VALID = args.valid_ds
 EPOCHS = args.epochs
 LEARNING_RATE = args.lr
 BATCH_SIZE = args.batch_size
@@ -104,18 +83,18 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
     for i, label in enumerate(examples["ner_tags"]):
         word_ids = tokenized_inputs.word_ids(
             batch_index=i
-        )  # Map tokens to their respective word.
+        )  # Mapea tokens a cada palabra
         previous_word_idx = None
         label_ids = []
-        for word_idx in word_ids:  # Set the special tokens to -100.
+        for word_idx in word_ids:  # Setea tokens especiales a -100
             if word_idx is None:
                 label_ids.append(IGNORE_INDEX)
-            elif (
-                word_idx != previous_word_idx
-            ):  # Only label the first token of a given word.
+            elif word_idx != previous_word_idx:  # pone le label del primer token
                 label_ids.append(label[word_idx])
             else:
-                ##label_ids.append(IGNORE_INDEX)
+                # Replica el token. Si se cambia, entonces se pone -100 en
+                # las subpalabras que no sea la primera.
+                # label_ids.append(IGNORE_INDEX)
                 label_ids.append(label[word_idx])
             previous_word_idx = word_idx
         labels.append(label_ids)
@@ -130,32 +109,19 @@ def main():
 
     mlflow.set_experiment(f"{OUTPUT_DIR}")
     with mlflow.start_run():
+        # para poder usar bien mlflow y que se guarden algunas metricas
         mlflow.log_param("a", 1)
         mlflow.log_metric("b", 2)
 
-    test_ds = load_dataset("conll2002", "es", split="test")
-
     removable_columns_conll = ["id", "pos_tags", "ner_tags"]
-    removable_columns_wikineural = ["lang", "ner_tags"]
 
-    if TRAIN == TRAIN_DS[0]:
-        rem_columns_train = removable_columns_conll
-        train_ds = load_dataset("conll2002", "es", split="train")
-    elif TRAIN == TRAIN_DS[1]:
-        rem_columns_train = removable_columns_conll
-        train_ds = train_ds = load_dataset(
-            "NazaGara/wikiner", split="train", use_auth_token=True
-        )
-    else:
-        rem_columns_train = removable_columns_wikineural
-        train_ds = load_dataset("Babelscape/wikineural", split="train_es")
+    # si se entrena con el dataset de wikineural, descomentar aca y en el map.
+    # removable_columns_wikineural = ["lang", "ner_tags"]
 
-    if VALID == VALID_DS[0]:
-        rem_columns_valid = removable_columns_conll
-        valid_ds = load_dataset("conll2002", "es", split="validation")
-    else:
-        rem_columns_valid = removable_columns_wikineural
-        valid_ds = load_dataset("Babelscape/wikineural", split="val_es")
+    train_ds = load_dataset("conll2002", "es", split="train")
+    valid_ds = load_dataset("conll2002", "es", split="validation")
+
+    test_ds = load_dataset("conll2002", "es", split="test")
 
     train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
     test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
@@ -164,12 +130,13 @@ def main():
     train_ds = train_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=rem_columns_train,
+        remove_columns=removable_columns_conll,
+        # remove_columns=removable_columns_wikineural,
     )
     valid_ds = valid_ds.map(
         tokenize_and_align_labels,
         batched=True,
-        remove_columns=rem_columns_valid,
+        remove_columns=removable_columns_conll,
     )
     test_ds = test_ds.map(
         tokenize_and_align_labels,
@@ -177,14 +144,12 @@ def main():
         remove_columns=removable_columns_conll,
     )
 
-    # aca tengo que ver la parte de concatenar los datasets y combinarlos.
-
     data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
-        save_strategy="no",  # esto para no hacer checkpointing
-        logging_steps=50,
+        save_strategy="no",  # para no guardar modelos de checkpoint.
+        # logging_steps=50,             # #pasos para hacer el log de la perdida.
         evaluation_strategy="epoch",
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,
@@ -203,18 +168,6 @@ def main():
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
     )
-
-    wneural_test_ds = load_dataset("Babelscape/wikineural", split="test_es")
-    wneural_test_ds = wneural_test_ds.filter(
-        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
-    )
-    test_ds = wneural_test_ds.map(
-        tokenize_and_align_labels,
-        batched=True,
-        remove_columns=removable_columns_wikineural,
-    )
-
-    #test_ds = bootstrap_fine_grained(wneural_test_ds, trainer, 0.95)
 
     evaluate_and_save(f"{OUTPUT_DIR}/test.csv", trainer, test_ds)
 

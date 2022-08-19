@@ -28,10 +28,15 @@ TOKEN_MAP = {i: label for i, label in enumerate(LABEL_LIST)}
 
 
 def flat_list(t: list) -> list:
+    """Unflats a list of lists"""
     return [item for sublist in t for item in sublist]
 
 
 def correct_padding(word_ids: list, labels: list, preds: list) -> list:
+    """
+    Funcion que corrije los padding, notar que es como la funcion de
+    correct_pad, pero en esa uso los word_ids, lo que hace que sea mas preciso.
+    """
     new_labels, new_preds = [], []
     for i in range(len(word_ids)):
         lab, pred = [], []
@@ -52,12 +57,12 @@ def correct_padding(word_ids: list, labels: list, preds: list) -> list:
     return new_labels, new_preds
 
 
-def correct_pad(labels, preds):
+def correct_pad(labels: list, preds: list) -> list:
     """
     Funcion que elimina los elementos que se agregaron por el pad en las
     predicciones. Retorna una tupla con las listas luego del flattening, listas
-    para poder usarse con las metricas.
-    NOTAR: elimina los elementos a izquierda, si el padding se realiza en la
+    para poder usarse en compute metrics.
+    NOTAR: elimina los elementos a derecha, si el padding se realiza en la
     tokenizacion no se corrije.
     """
     # detect pad
@@ -91,8 +96,6 @@ def compute_metrics(pred: EvalPrediction) -> dict:
 
 
 from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
     classification_report,
     ConfusionMatrixDisplay,
 )
@@ -112,7 +115,6 @@ COLOR_LIST = [
     "#e14b31",
     "#ffffff",
 ][::-1]
-# ["#2e2b28","#2e2b28", "#2e2b28", "#2e2b28", "#2e2b28", "#2e2b28",  "#c23728", "#e14b31","#de6e56", "#e1a692","#fd7f6f", "#ffffff"][::-1]
 CMAP = LinearSegmentedColormap.from_list("cusotm_pastel", COLOR_LIST)
 
 
@@ -125,11 +127,6 @@ def evaluate(trainer: Trainer, ds: Dataset) -> dict:
     preds = predictions.predictions.argmax(-1)
     labels = predictions.label_ids
     word_ids = ds["word_ids"]
-
-    # flat_labels, flat_preds = correct_pad(labels, preds)
-
-    # flat_labels = flat_list(correct_padding(word_ids, labels))
-    # flat_preds = flat_list(correct_padding(word_ids, preds))
 
     unpad_labels, unpad_preds = correct_padding(word_ids, labels, preds)
     flat_labels, flat_preds = flat_list(unpad_labels), flat_list(unpad_preds)
@@ -152,11 +149,6 @@ def evaluate_and_save(filename, trainer: Trainer, ds: Dataset):
     preds = predictions.predictions.argmax(-1)
     labels = predictions.label_ids
     word_ids = ds["word_ids"]
-
-    # flat_labels, flat_preds = correct_pad(labels, preds)
-
-    # flat_labels = flat_list(correct_padding(word_ids, labels))
-    # flat_preds = flat_list(correct_padding(word_ids, preds))
 
     unpad_labels, unpad_preds = correct_padding(word_ids, labels, preds)
     flat_labels, flat_preds = flat_list(unpad_labels), flat_list(unpad_preds)

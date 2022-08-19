@@ -61,7 +61,9 @@ checkpoint = "dccuchile/bert-base-spanish-wwm-cased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, num_labels=len(LABEL_LIST))
 
 model = AutoModelForTokenClassification.from_pretrained(
-    "results/conll_baseline/trained_model/",
+    # "results/conll_baseline/trained_model/",
+    # si hay un modelo ya, cambiar path y descomentar.
+    checkpoint,
     num_labels=9,
     id2label=TOKEN_MAP,
     label2id=LABEL_MAP,
@@ -87,18 +89,18 @@ def tokenize_and_align_labels(examples) -> BatchEncoding:
     for i, label in enumerate(examples["ner_tags"]):
         word_ids = tokenized_inputs.word_ids(
             batch_index=i
-        )  # Map tokens to their respective word.
+        )  # Mapea tokens a cada palabra
         previous_word_idx = None
         label_ids = []
-        for word_idx in word_ids:  # Set the special tokens to -100.
+        for word_idx in word_ids:  # Setea tokens especiales a -100
             if word_idx is None:
                 label_ids.append(IGNORE_INDEX)
-            elif (
-                word_idx != previous_word_idx
-            ):  # Only label the first token of a given word.
+            elif word_idx != previous_word_idx:  # pone le label del primer token
                 label_ids.append(label[word_idx])
             else:
-                ##label_ids.append(IGNORE_INDEX)
+                # Replica el token. Si se cambia, entonces se pone -100 en
+                # las subpalabras que no sea la primera.
+                # label_ids.append(IGNORE_INDEX)
                 label_ids.append(label[word_idx])
             previous_word_idx = word_idx
         labels.append(label_ids)
@@ -118,7 +120,7 @@ def main():
 
     test_ds = load_dataset("conll2002", "es", split="test")
 
-    removable_columns_conll = ["id", "pos_tags", "ner_tags"]  # , "tokens"]
+    removable_columns_conll = ["id", "pos_tags", "ner_tags"]
     removable_columns_wikineural = ["lang", "ner_tags"]
 
     train_ds, test_ds, valid_ds = load_dataset(
@@ -145,13 +147,11 @@ def main():
         remove_columns=removable_columns_conll,
     )
 
-    # aca tengo que ver la parte de concatenar los datasets y combinarlos.
-
     data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
-        save_strategy="no",  # esto para no hacer checkpointing
+        save_strategy="no",
         evaluation_strategy="epoch",
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,
@@ -171,13 +171,13 @@ def main():
         compute_metrics=compute_metrics,
     )
 
-    # trainer.train()
+    trainer.train()
 
-    # trainer.save_model(f"{OUTPUT_DIR}/pre_boot/trained_model/")
+    trainer.save_model(f"{OUTPUT_DIR}/pre_boot/trained_model/")
 
-    # evaluate_and_save(f"{OUTPUT_DIR}/pre_boot/test.csv", trainer, test_ds)
+    evaluate_and_save(f"{OUTPUT_DIR}/pre_boot/test.csv", trainer, test_ds)
 
-    # dump_log(f"{OUTPUT_DIR}/pre_boot/logs.txt", trainer)
+    dump_log(f"{OUTPUT_DIR}/pre_boot/logs.txt", trainer)
 
     ## bootstrapping
 
@@ -191,49 +191,18 @@ def main():
         remove_columns=removable_columns_wikineural,
     )
 
-    wner_train_ds = load_dataset(
-        "NazaGara/wikiner",
-        split="train[:01%]",
-        use_auth_token=True,
-    )
-    wner_train_ds = wner_train_ds.filter(
-        lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
-    )
-    wner_train_ds = wner_train_ds.map(
-        tokenize_and_align_labels,
-        batched=True,
-        remove_columns=["id", "pos_tags", "ner_tags"],
-    )
-
-    # new_valid_ds = load_dataset("Babelscape/wikineural", split="val_es")
-    # new_valid_ds = new_valid_ds.filter(
-    #    lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"])
-    # )
-    # new_valid_ds = new_valid_ds.map(
-    #    tokenize_and_align_labels,
-    #    batched=True,
-    #    remove_columns=removable_columns_wikineural,
-    # )
-
-    wneural_bootstraped_ds = bootstrap_dataset(wneural_train_ds, trainer)
-    # wner_bootstraped_ds = bootstrap_fine_grained(wner_train_ds, trainer, 0.95)
-    # wneural_bootstraped_ds = bootstrap_fine_grained(wneural_train_ds, trainer, 0.95)
-
-    # valid_ds = concatenate_datasets([valid_ds, valid_bootstraped_ds]).shuffle(seed=10)
+    # wneural_bootstraped_ds = bootstrap_dataset(wneural_train_ds, trainer)
+    wneural_bootstraped_ds = bootstrap_fine_grained(wneural_train_ds, trainer, 0.95)
 
     conll_ents = train_coverage(train_ds)
     wneural_ents = train_coverage(wneural_bootstraped_ds)
-    # wner_ents = train_coverage(wner_bootstraped_ds)
     with open(f"{OUTPUT_DIR}/coverage.txt", "+w") as f:
         f.write(f"Conll entities: {len(conll_ents)}\n")
         f.write(f"wikineural entities: {len(wneural_ents)}\n")
-        #    f.write(f"wikiner entities: {len(wner_ents)}\n")
         f.write(f"Total entities: {len(conll_ents|wneural_ents)}\n")
 
-    # wner_bootstraped_ds = wner_bootstraped_ds.remove_columns(['tokens'])
     wneural_bootstraped_ds = wneural_bootstraped_ds.remove_columns(["tokens"])
-
-    train_ds = concatenate_datasets([wneural_bootstraped_ds]).shuffle(seed=10)
+    # wneural_bootstraped_ds.save_to_disk(f"{OUTPUT_DIR}/wikineural_bootstrapped_ds")
 
     trainer_b = Trainer(
         model=model,
