@@ -34,8 +34,8 @@ Load the model and its tokenizer :
 ```python
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 
-tokenizer = AutoTokenizer.from_pretrained("NazaGara/NER-fine-tuned-BETO", use_auth_token=True)
-model = AutoModelForTokenClassification.from_pretrained("NazaGara/NER-fine-tuned-BETO", use_auth_token=True)
+tokenizer = AutoTokenizer.from_pretrained("NazaGara/NER-fine-tuned-BETO")
+model = AutoModelForTokenClassification.from_pretrained("NazaGara/NER-fine-tuned-BETO")
 
 nlp = pipeline('ner', model=model, tokenizer=tokenizer, aggregation_strategy="simple")
 nlp('Ignacio se fue de viaje por Buenos aires')
@@ -88,4 +88,4 @@ This work is licensed under a
 * Garagiola, Nazareno
 * [LinkedIn](https://www.linkedin.com/in/nazareno-garagiola/)
 * [Mail](ngaragiola430@mi.unc.edu.ar)
-* [Twitter](https://twitter.com/nazagara99)
+* [Twitter](https://twitter.com/naza_gara)
