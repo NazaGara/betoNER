@@ -124,8 +124,6 @@ def main():
     test_ds = load_dataset("conll2002", "es", split="test")
 
     train_ds = train_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
-    test_ds = test_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
-    valid_ds = valid_ds.filter(lambda ex: ex["ner_tags"] != [0] * len(ex["ner_tags"]))
 
     train_ds = train_ds.map(
         tokenize_and_align_labels,

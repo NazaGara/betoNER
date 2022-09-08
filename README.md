@@ -22,7 +22,7 @@ Training data was classified as follow:
 |    PER     | Person’s name |
 |    ORG     | Organization  |
 |    LOC     |  Location     |
-|   MISC     | Miscellaneous |
+|    MISC    | Miscellaneous |
 
 Alongside the IOB formatting, this is:
   - B-LABEL if the word is at the beggining of the entity.
@@ -85,7 +85,6 @@ This work is licensed under a
 [cc-by-shield]: https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg
 
 ## Contact
-* Garagiola, Nazareno
 * [LinkedIn](https://www.linkedin.com/in/nazareno-garagiola/)
 * [Mail](ngaragiola430@mi.unc.edu.ar)
 * [Twitter](https://twitter.com/naza_gara)
